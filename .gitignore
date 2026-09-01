@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+*.pyc
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build temp
+build_temp/
+mobile-release/android/build_temp/
+mobile-release/ipa_temp/
+
+# SQLite WAL and journal files (keep base db if needed or let app auto-init)
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Logs
+*.log

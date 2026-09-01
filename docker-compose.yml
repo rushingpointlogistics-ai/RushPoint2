@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  rushpoint-web:
+    build: .
+    container_name: rushpoint_app
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./rushingpoint.db:/app/rushingpoint.db
+      - ./app/static/uploads:/app/app/static/uploads
+      - ./app/static/downloads:/app/app/static/downloads
+    environment:
+      - PORT=8000
+      - ENVIRONMENT=production

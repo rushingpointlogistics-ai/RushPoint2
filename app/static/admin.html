@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RushPoint - Admin Operations Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/css/maroon-theme.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+    html, body { height: 100%; overflow: hidden; background: #0F172A; }
+    #admin-app-root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .admin-auth-wrapper {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #1F0005 0%, #2B0008 50%, #0F172A 100%);
+      padding: 20px;
+    }
+    .admin-auth-card {
+      background: #FFFFFF; border-radius: 24px; padding: 40px 36px;
+      max-width: 440px; width: 100%;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .admin-brand-logo {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, #7F1D1D 0%, #DC2626 100%);
+      color: #FFF; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1.5rem;
+      margin: 0 auto 16px;
+      box-shadow: 0 4px 14px rgba(220,38,38,0.4);
+    }
+    .error-banner {
+      display: none;
+      background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B;
+      padding: 11px 14px; border-radius: 12px;
+      font-size: 0.82rem; font-weight: 600; margin-bottom: 18px; line-height: 1.4;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 6px; }
+    .form-input {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid #CBD5E1; border-radius: 12px;
+      font-size: 0.92rem; color: #0F172A; outline: none; transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: #DC2626; box-shadow: 0 0 0 3px rgba(220,38,38,0.12); }
+    .btn-submit {
+      width: 100%; padding: 13px;
+      background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%);
+      color: #FFF; border: none; border-radius: 12px;
+      font-size: 0.95rem; font-weight: 800; cursor: pointer; margin-top: 6px;
+      box-shadow: 0 4px 14px rgba(185,28,28,0.4); transition: all 0.2s;
+    }
+    .btn-submit:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  </style>
+</head>
+<body>
+<div id="admin-app-root">
+  <div id="admin-portal-root" style="height: 100%; overflow-y: auto;">
+    <div class="admin-auth-wrapper">
+      <div class="admin-auth-card">
+        <img src="/static/img/rushpoint-logo-transparent.png" style="height: 66px; max-width: 260px; object-fit: contain; margin: 0 auto 18px; display: block; filter: drop-shadow(0 2px 10px rgba(127,29,29,0.12));" alt="RushPoint Logistics">
+        <h2 style="font-size:1.35rem;font-weight:900;color:#7F1D1D;text-align:center;margin-bottom:4px;">Admin Operations Console</h2>
+        <p style="font-size:0.82rem;color:#64748B;text-align:center;margin-bottom:24px;">Sign in with authorized administrator credentials to manage fleet, dispatch & finance.</p>
+        <div id="admin-error-box" class="error-banner"></div>
+        <form onsubmit="handleDedicatedAdminLogin(event)">
+          <div class="form-group">
+            <label class="form-label">Administrator Email / Username</label>
+            <input type="text" id="admin-login-email" class="form-input" placeholder="admin@rushingpoint.com" value="admin@rushingpoint.com" required
+              oninput="document.getElementById('admin-error-box').style.display='none'">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="admin-login-pwd" class="form-input" placeholder="Enter password" value="admin123" required
+              oninput="document.getElementById('admin-error-box').style.display='none'">
+          </div>
+          <button type="submit" id="btn-admin-login" class="btn-submit">Sign In to Operations Console</button>
+        </form>
+        <div style="text-align:center;margin-top:20px;font-size:0.75rem;color:#94A3B8;">Protected Enterprise System | 256-Bit SSL Encrypted</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/admin-portal.js"></script>
+<script>
+  function renderAdminLoginScreen() {
+    const container = document.getElementById('admin-portal-root');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="admin-auth-wrapper">
+        <div class="admin-auth-card">
+          <img src="/static/img/rushpoint-logo-transparent.png" style="height: 66px; max-width: 260px; object-fit: contain; margin: 0 auto 18px; display: block; filter: drop-shadow(0 2px 10px rgba(127,29,29,0.12));" alt="RushPoint Logistics">
+          <h2 style="font-size:1.35rem;font-weight:900;color:#7F1D1D;text-align:center;margin-bottom:4px;">Admin Operations Console</h2>
+          <p style="font-size:0.82rem;color:#64748B;text-align:center;margin-bottom:24px;">Sign in with authorized administrator credentials to manage fleet, dispatch & finance.</p>
+          <div id="admin-error-box" class="error-banner"></div>
+          <form onsubmit="handleDedicatedAdminLogin(event)">
+            <div class="form-group">
+              <label class="form-label">Administrator Email / Username</label>
+              <input type="text" id="admin-login-email" class="form-input" placeholder="admin@rushingpoint.com" value="admin@rushingpoint.com" required
+                oninput="document.getElementById('admin-error-box').style.display='none'">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" id="admin-login-pwd" class="form-input" placeholder="Enter password" value="admin123" required
+                oninput="document.getElementById('admin-error-box').style.display='none'">
+            </div>
+            <button type="submit" id="btn-admin-login" class="btn-submit">Sign In to Operations Console</button>
+          </form>
+          <div style="text-align:center;margin-top:20px;font-size:0.75rem;color:#94A3B8;">Protected Enterprise System | 256-Bit SSL Encrypted</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function handleDedicatedAdminLogin(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const loginEl = document.getElementById('admin-login-email');
+    const pwdEl = document.getElementById('admin-login-pwd');
+    const login = loginEl ? loginEl.value.trim() : '';
+    const password = pwdEl ? pwdEl.value : '';
+    const btn = document.getElementById('btn-admin-login');
+    const errBox = document.getElementById('admin-error-box');
+
+    if (!login || !password) {
+      if (errBox) {
+        errBox.innerHTML = '<strong>Error:</strong> Please enter email and password.';
+        errBox.style.display = 'block';
+      }
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying credentials...'; }
+    if (errBox) errBox.style.display = 'none';
+
+    try {
+      const res = await API.post('/api/auth/login', { login, password });
+      if (!res || !res.user || (res.user.account_type !== 'ADMIN' && res.user.account_type !== 'STAFF')) {
+        if (errBox) {
+          errBox.innerHTML = '<strong>Access Denied:</strong> This account does not have administrative privileges.';
+          errBox.style.display = 'block';
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Sign In to Operations Console'; }
+        return;
+      }
+      API.setToken(res.token);
+      API.setUser(res.user);
+      if (res.wallet) localStorage.setItem('rp_wallet', JSON.stringify(res.wallet));
+      if (typeof API.showToast === 'function') API.showToast('Welcome, ' + res.user.full_name + '! Administrator Console loaded.', 'success');
+      
+      loadAdminDashboard();
+    } catch (err) {
+      const msg = (err && (err.detail || err.message)) || 'Invalid administrative credentials. Please check your username and password.';
+      if (errBox) {
+        errBox.innerHTML = '<strong>Authentication Failed:</strong> ' + msg;
+        errBox.style.display = 'block';
+      }
+      if (typeof API.showToast === 'function') API.showToast('Login failed: ' + msg, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In to Operations Console'; }
+    }
+  }
+
+  function loadAdminDashboard(retries = 0) {
+    if (typeof AdminPortal !== 'undefined' && typeof AdminPortal.init === 'function') {
+      AdminPortal.init();
+    } else if (retries < 15) {
+      const root = document.getElementById('admin-portal-root');
+      if (root) root.innerHTML = '<div style="padding:60px;text-align:center;color:#FFF;"><div style="font-size:2rem;margin-bottom:12px;">⏳</div><div style="font-weight:700;font-size:1.1rem;">Loading Admin Operations Console...</div></div>';
+      setTimeout(() => loadAdminDashboard(retries + 1), 200);
+    } else {
+      const root = document.getElementById('admin-portal-root');
+      if (root) {
+        root.innerHTML = '<div style="padding:40px;text-align:center;color:#FFF;"><h3 style="color:#EF4444;margin-bottom:12px;">Console Script Failed to Load</h3><button onclick="location.reload()" style="padding:10px 20px;background:#B91C1C;color:#FFF;border:none;border-radius:10px;font-weight:800;cursor:pointer;">Reload Page</button></div>';
+      }
+    }
+  }
+
+  function doLogout() {
+    if (typeof API !== 'undefined') API.logout();
+    renderAdminLoginScreen();
+  }
+
+  function checkAdminAuth() {
+    try {
+      if (typeof API === 'undefined') {
+        setTimeout(checkAdminAuth, 100);
+        return;
+      }
+      const user = API.getUser();
+      const token = API.getToken();
+      if (token && user && (user.account_type === 'ADMIN' || user.account_type === 'STAFF')) {
+        loadAdminDashboard();
+      }
+      // If not logged in, the static login form in HTML is already visible!
+    } catch (e) {
+      console.error("Auth check failed:", e);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAdminAuth);
+  } else {
+    checkAdminAuth();
+  }
+</script>
+</body>
+</html>

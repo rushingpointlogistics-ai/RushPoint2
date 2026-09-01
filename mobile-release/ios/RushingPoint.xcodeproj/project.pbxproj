@@ -1,0 +1,183 @@
+﻿// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		A10000012900000100000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000001 /* AppDelegate.swift */; };
+		A10000032900000100000001 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000042900000100000001 /* ViewController.swift */; };
+		A10000022900000100000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A10000042900000100000001 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		A10000052900000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000062900000100000001 /* RushingPoint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RushingPoint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000072900000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000082900000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000012900000100000001 /* AppDelegate.swift in Sources */,
+				A10000032900000100000001 /* ViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000092900000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000102900000100000001 /* RushingPoint */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000001 /* AppDelegate.swift */,
+				A10000042900000100000001 /* ViewController.swift */,
+				A10000052900000100000001 /* Info.plist */,
+			);
+			path = RushingPoint;
+			sourceTree = "<group>";
+		};
+		A10000112900000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000062900000100000001 /* RushingPoint.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000122900000100000001 = {
+			isa = PBXGroup;
+			children = (
+				A10000102900000100000001 /* RushingPoint */,
+				A10000112900000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000132900000100000001 /* RushingPoint */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000142900000100000001 /* Build configuration list for PBXNativeTarget "RushingPoint" */;
+			buildPhases = (
+				A10000082900000100000001 /* Sources */,
+				A10000072900000100000001 /* Frameworks */,
+				A10000092900000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RushingPoint;
+			productName = RushingPoint;
+			productReference = A10000062900000100000001 /* RushingPoint.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000152900000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A10000132900000100000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000162900000100000001 /* Build configuration list for PBXProject "RushingPoint" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000122900000100000001;
+			productRefGroup = A10000112900000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000132900000100000001 /* RushingPoint */,
+			);
+		};
+		A10000172900000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rushingpoint.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10000182900000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rushingpoint.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A10000142900000100000001 /* Build configuration list for PBXNativeTarget "RushingPoint" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000172900000100000001 /* Debug */,
+				A10000182900000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000162900000100000001 /* Build configuration list for PBXProject "RushingPoint" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000172900000100000001 /* Debug */,
+				A10000182900000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+	};
+	rootObject = A10000152900000100000001 /* Project object */;
+}

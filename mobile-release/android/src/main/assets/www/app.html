@@ -1,0 +1,61 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RushingPoint — Marketplace & Delivery App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/css/maroon-theme.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+    html, body { height: 100%; background: #F1F5F9; }
+    #app-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #E2E8F0;
+    }
+    .mobile-frame {
+      width: 100%;
+      max-width: 440px;
+      height: 100vh;
+      background: #FFFFFF;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+      position: relative;
+    }
+    @media (min-width: 480px) {
+      .mobile-frame {
+        height: 94vh;
+        max-height: 880px;
+        border-radius: 36px;
+        border: 8px solid #1E293B;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-container">
+  <div class="mobile-frame">
+    <div id="mobile-app-root" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; height: 100%;">
+      <!-- Rendered dynamically by MobileApp -->
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/mobile-app.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    MobileApp.init();
+  });
+</script>
+</body>
+</html>

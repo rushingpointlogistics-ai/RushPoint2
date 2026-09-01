@@ -1,0 +1,7 @@
+﻿<resources>
+    <style name="Theme.RushingPoint" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#2B0008</item>
+        <item name="android:navigationBarColor">#1F0005</item>
+        <item name="android:windowBackground">#F1F5F9</item>
+    </style>
+</resources>

@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RushPoint — Multi-Vendor Marketplace & Smart Logistics Platform</title>
+  <meta name="description" content="RushPoint is Africa's smartest on-demand marketplace, instant parcel dispatch, and logistics platform. Shop from verified stores, dispatch waybills with live GPS tracking, and trade securely with 4-way financial escrow.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --blood-dark: #2B0008;
+      --blood-deeper: #1F0005;
+      --blood-primary: #7F1D1D;
+      --blood-crimson: #991B1B;
+      --blood-bright: #B91C1C;
+      --blood-glow: #DC2626;
+      --blood-accent: #EF4444;
+      --blood-tint: #FFE4E6;
+      --blood-card: #3A020C;
+      --gray-50: #F8FAFC;
+      --gray-100: #F1F5F9;
+      --gray-200: #E2E8F0;
+      --gray-600: #475569;
+      --gray-700: #334155;
+      --gray-800: #1E293B;
+      --gray-900: #0F172A;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: #FFFFFF; color: var(--gray-900); overflow-x: hidden; line-height: 1.6; }
+
+    /* Navigation Bar */
+    .navbar {
+      position: sticky;
+      top: 0;
+      background: rgba(43, 0, 8, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+      z-index: 1000;
+      padding: 16px 5%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #7F1D1D 0%, #DC2626 100%);
+      color: #FFF;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+    }
+    .brand-name {
+      font-size: 1.35rem;
+      font-weight: 900;
+      color: #FFFFFF;
+      letter-spacing: -0.5px;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: #E2E8F0;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #FECDD3; }
+    .nav-actions { display: flex; align-items: center; gap: 14px; }
+    .btn-nav {
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .btn-nav-primary {
+      background: linear-gradient(135deg, #991B1B 0%, #DC2626 100%);
+      color: #FFF;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+    }
+    .btn-nav-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6);
+    }
+
+    /* Hero Section */
+    .hero-section {
+      background: linear-gradient(180deg, var(--blood-dark) 0%, var(--blood-deeper) 100%);
+      color: #FFF;
+      padding: 90px 5% 100px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #FECDD3;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+    .hero-title {
+      font-size: 3.4rem;
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: -1.5px;
+      max-width: 900px;
+      margin: 0 auto 20px;
+      background: linear-gradient(180deg, #FFFFFF 0%, #FECDD3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle {
+      font-size: 1.2rem;
+      color: #CBD5E1;
+      max-width: 720px;
+      margin: 0 auto 36px;
+      font-weight: 400;
+    }
+    .download-badges {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .app-badge-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      background: #000000;
+      color: #FFFFFF;
+      border: 1px solid #334155;
+      padding: 12px 24px;
+      border-radius: 16px;
+      text-decoration: none;
+      transition: all 0.2s;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+    .app-badge-btn:hover {
+      transform: translateY(-2px);
+      border-color: #EF4444;
+      box-shadow: 0 10px 25px rgba(239, 68, 68, 0.25);
+    }
+    .app-badge-icon { font-size: 2rem; line-height: 1; }
+    .app-badge-text { text-align: left; }
+    .app-badge-sub { font-size: 0.68rem; text-transform: uppercase; color: #94A3B8; font-weight: 700; letter-spacing: 0.5px; }
+    .app-badge-main { font-size: 1.1rem; font-weight: 800; color: #FFF; }
+
+    /* Features Grid */
+    .section { padding: 90px 5%; }
+    .section-header { text-align: center; max-width: 700px; margin: 0 auto 60px; }
+    .section-tag { color: var(--blood-crimson); font-weight: 800; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .section-title { font-size: 2.3rem; font-weight: 900; letter-spacing: -0.8px; color: var(--gray-900); }
+    .section-desc { font-size: 1.05rem; color: var(--gray-600); margin-top: 12px; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; }
+    .feature-card {
+      background: #FFFFFF;
+      border: 1px solid var(--gray-200);
+      border-radius: 24px;
+      padding: 32px;
+      transition: all 0.25s;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: #FECDD3;
+      box-shadow: 0 15px 35px rgba(127, 29, 29, 0.08);
+    }
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      background: #FFF1F2;
+      color: var(--blood-primary);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+    }
+    .feature-title { font-size: 1.25rem; font-weight: 800; margin-bottom: 10px; color: var(--gray-900); }
+    .feature-text { font-size: 0.92rem; color: var(--gray-600); line-height: 1.55; }
+
+    /* Category Showcase */
+    .category-pills { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+    .cat-pill {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--gray-700);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Role Split Cards */
+    .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 32px; margin-top: 40px; }
+    .role-card {
+      background: linear-gradient(145deg, #2B0008 0%, #1A0004 100%);
+      color: #FFF;
+      border-radius: 28px;
+      padding: 40px 32px;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      position: relative;
+    }
+    .role-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(239,68,68,0.25); color: #FECDD3; margin-bottom: 16px; }
+    .role-card h3 { font-size: 1.6rem; font-weight: 900; margin-bottom: 12px; }
+    .role-card p { font-size: 0.95rem; color: #CBD5E1; margin-bottom: 24px; }
+    .role-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #FFFFFF;
+      color: var(--blood-primary);
+      padding: 12px 24px;
+      border-radius: 14px;
+      font-weight: 800;
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    .role-btn:hover { background: #FFE4E6; transform: translateY(-1px); }
+
+    /* FAQ Section */
+    .faq-container { max-width: 800px; margin: 0 auto; }
+    .faq-item {
+      border-bottom: 1px solid #E2E8F0;
+      padding: 20px 0;
+    }
+    .faq-question { font-size: 1.1rem; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+    .faq-answer { font-size: 0.92rem; color: var(--gray-600); }
+
+    /* Footer */
+    .footer {
+      background: var(--blood-deeper);
+      color: #94A3B8;
+      padding: 70px 5% 40px;
+      border-top: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 50px;
+    }
+    .footer-col h4 { color: #FFF; font-size: 0.95rem; font-weight: 800; margin-bottom: 16px; }
+    .footer-col ul { list-style: none; }
+    .footer-col ul li { margin-bottom: 10px; }
+    .footer-col ul a { color: #94A3B8; text-decoration: none; font-size: 0.88rem; transition: color 0.2s; }
+    .footer-col ul a:hover { color: #FFF; }
+    .footer-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 30px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.82rem;
+    }
+    .admin-link {
+      color: #64748B;
+      text-decoration: none;
+      font-size: 0.78rem;
+      transition: color 0.2s;
+    }
+    .admin-link:hover { color: #FECDD3; }
+
+    @media (max-width: 768px) {
+      .hero-title { font-size: 2.2rem; }
+      .nav-links { display: none; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVIGATION -->
+  <nav class="navbar">
+    <a href="/" class="nav-brand">
+      <img src="/static/img/rushpoint-logo-light.png" style="height: 46px; max-width: 220px; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));" alt="RushPoint Logistics">
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="#marketplace">Marketplace</a></li>
+      <li><a href="#logistics">Logistics & Waybill</a></li>
+      <li><a href="#partners">Merchants & Riders</a></li>
+      <li><a href="#security">Escrow Security</a></li>
+      <li><a href="#apply">Apply as Vendor</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <a href="/app" class="btn-nav btn-nav-primary">Launch Web App 🚀</a>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <section class="hero-section">
+    <div class="hero-badge">⚡ Africa's Next-Gen Multi-Vendor & Logistics Platform</div>
+    <h1 class="hero-title">Shop from Verified Stores.<br>Dispatch Packages in Minutes.</h1>
+    <p class="hero-subtitle">
+      RushPoint connects buyers, vetted merchants, and rapid dispatch riders across Africa. Trade with 100% financial escrow, live GPS tracking, and instant delivery.
+    </p>
+
+    <div class="download-badges">
+      <!-- Android APK Release -->
+      <a href="/static/downloads/rushpoint-app-v1.0-release.apk" class="app-badge-btn" download>
+        <div class="app-badge-icon">🤖</div>
+        <div class="app-badge-text">
+          <div class="app-badge-sub">Download Android</div>
+          <div class="app-badge-main">Install APK</div>
+        </div>
+      </a>
+
+      <!-- Apple iOS IPA Release -->
+      <a href="/static/downloads/rushpoint-app-v1.0-release.ipa" class="app-badge-btn" download>
+        <div class="app-badge-icon">🍏</div>
+        <div class="app-badge-text">
+          <div class="app-badge-sub">Download iPhone</div>
+          <div class="app-badge-main">Install IPA / App</div>
+        </div>
+      </a>
+
+      <!-- Instant Web App -->
+      <a href="/app" class="app-badge-btn" style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); border-color: #EF4444; box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45);">
+        <div class="app-badge-icon">🌐</div>
+        <div class="app-badge-text">
+          <div class="app-badge-sub">Instant Access</div>
+          <div class="app-badge-main">Launch Web App</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Live Category Showcase -->
+    <div class="category-pills">
+      <div class="cat-pill">🍔 Food & Grills</div>
+      <div class="cat-pill">🛒 Supermarket Groceries</div>
+      <div class="cat-pill">📱 Phones & Electronics</div>
+      <div class="cat-pill">🏗️ Sandcrete Blocks & Building Materials</div>
+      <div class="cat-pill">🏡 Real Estate, Land & Estates</div>
+      <div class="cat-pill">📦 Custom Parcel Waybills</div>
+    </div>
+  </section>
+
+  <!-- MULTI-VENDOR MARKETPLACE SECTION -->
+  <section class="section" id="marketplace">
+    <div class="section-header">
+      <div class="section-tag">Centrally Vetted Commerce</div>
+      <h2 class="section-title">The Complete Marketplace Ecosystem</h2>
+      <p class="section-desc">Order food, groceries, electronics, and heavy building supplies from certified stalls with transparent pricing and real-time stock updates.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="feature-icon">🏬</div>
+        <h3 class="feature-title">Verified Storefronts</h3>
+        <p class="feature-text">Every merchant undergoes strict business registration verification, ensuring genuine products, transparent pricing, and zero counterfeit goods.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🛍️</div>
+        <h3 class="feature-title">Multi-Item Smart Cart</h3>
+        <p class="feature-text">Dynamic cargo and weight-based delivery fee calculations. Bulk order building blocks, tech gadgets, or farm produce in one smooth checkout.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">💳</div>
+        <h3 class="feature-title">Instant Wallet & Online Pay</h3>
+        <p class="feature-text">Pay securely with bank transfer, debit cards via Flutterwave & Paystack, or instant digital wallet with zero hidden transaction charges.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGISTICS & DISPATCH SECTION -->
+  <section class="section" id="logistics" style="background: #F8FAFC;">
+    <div class="section-header">
+      <div class="section-tag">Intelligent Courier Fleet</div>
+      <h2 class="section-title">Door-to-Door Waybill & Instant Dispatch</h2>
+      <p class="section-desc">Send parcels across town or inter-state with real-time GPS telemetry, proof-of-delivery OTP codes, and automated rider dispatch matching.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <h3 class="feature-title">Live GPS Fleet Radar</h3>
+        <p class="feature-text">Track your dispatch rider live from pickup station to destination with minute-by-minute ETA calculation and interactive map navigation.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3 class="feature-title">Custom Waybill Links</h3>
+        <p class="feature-text">Generate shareable online payment invoices for recipient or sender. Complete parcel pickup and delivery with zero physical cash hassle.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔢</div>
+        <h3 class="feature-title">Proof-of-Delivery OTP</h3>
+        <p class="feature-text">Packages are only handed over upon recipient providing a unique 4-digit verification code, ensuring zero stolen or misplaced goods.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4-WAY ESCROW SECURITY -->
+  <section class="section" id="security">
+    <div class="section-header">
+      <div class="section-tag">100% Guaranteed Protection</div>
+      <h2 class="section-title">4-Way Financial Escrow Protection</h2>
+      <p class="section-desc">Customer funds are safely locked in platform escrow until goods are physically delivered and verified. Zero risk of loss for buyers, vendors, or couriers.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card" style="border-left: 4px solid #059669;">
+        <div class="feature-icon" style="background: #ECFDF5; color: #059669;">🛡️</div>
+        <h3 class="feature-title">Customer Escrow Lock</h3>
+        <p class="feature-text">Your payment is never released to the merchant until you confirm receipt with your Delivery OTP. Out of stock? Get an instant 100% wallet refund.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 4px solid #2563EB;">
+        <div class="feature-icon" style="background: #EFF6FF; color: #2563EB;">🏪</div>
+        <h3 class="feature-title">Guaranteed Merchant Payout</h3>
+        <p class="feature-text">Merchants are guaranteed payout clearance the exact moment the rider verifies delivery. Direct disbursement to any Nigerian bank account.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 4px solid #7C3AED;">
+        <div class="feature-icon" style="background: #F5F3FF; color: #7C3AED;">🛵</div>
+        <h3 class="feature-title">Fair Rider Split</h3>
+        <p class="feature-text">Fleet couriers receive transparent earnings per trip with automated commission splits, weekly payouts, and live earnings dashboards.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARTNERSHIP CALL TO ACTION -->
+  <section class="section" id="partners" style="background: #FFFFFF;">
+    <div class="section-header">
+      <div class="section-tag">Join Our Network</div>
+      <h2 class="section-title">Grow with RushPoint</h2>
+      <p class="section-desc">Whether you run a physical retail store, a restaurant, or own a motorcycle or van, RushPoint connects you to thousands of paying customers daily.</p>
+    </div>
+
+    <div class="role-grid">
+      <div class="role-card">
+        <div class="role-badge">For Merchants & Sellers</div>
+        <h3>Open Your Official Storefront</h3>
+        <p>List your products, set custom delivery zones, manage inventory in bulk, and reach customers across your state with zero upfront setup fees.</p>
+        <a href="/invite-signup.html" class="role-btn">Become a Partner Vendor →</a>
+      </div>
+
+      <div class="role-card" style="background: linear-gradient(145deg, #1E1B4B 0%, #0F172A 100%); border-color: rgba(99, 102, 241, 0.3);">
+        <div class="role-badge" style="background: rgba(99, 102, 241, 0.2); color: #C7D2FE;">For Couriers & Fleet Owners</div>
+        <h3>Ride & Earn Daily</h3>
+        <p>Connect your motorcycle, tricycle, or delivery van to our smart dispatch radar. Get instant trip assignments, fair commissions, and weekly bank cashouts.</p>
+        <a href="/invite-signup.html" class="role-btn" style="color: #1E1B4B;">Join the Fleet Network →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ SECTION -->
+  <section class="section" id="faq" style="background: #F8FAFC;">
+    <div class="section-header">
+      <div class="section-tag">Got Questions?</div>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+    </div>
+
+      <div class="faq-item">
+        <div class="faq-question">How do merchants and riders register?</div>
+        <div class="faq-answer">Merchants and riders complete an onboarding KYC review and register via administrative invite tokens to maintain verified quality and safety standards. You can also submit a direct partnership application using the form below.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VENDOR PARTNER APPLICATION FORM -->
+  <section class="section" id="apply" style="background: #FFFFFF;">
+    <div class="section-header">
+      <div class="section-tag">Apply to Become a Partner</div>
+      <h2 class="section-title">Submit Your Vendor Application</h2>
+      <p class="section-desc">Fill in the form below and our onboarding team will reach out to you within 24 hours. All serious businesses are welcome.</p>
+    </div>
+
+    <div style="max-width: 700px; margin: 0 auto;">
+      <!-- Success Banner (hidden by default) -->
+      <div id="vendor-form-success" style="display: none; background: #ECFDF5; border: 1px solid #6EE7B7; color: #065F46; border-radius: 16px; padding: 18px 22px; margin-bottom: 24px; font-size: 0.92rem; font-weight: 600;">
+        <strong>Application Submitted!</strong> Our team will contact you within 24 hours. Check your phone and email.
+        <div id="vendor-form-ref" style="font-family: monospace; margin-top: 6px; font-size: 0.82rem; color: #059669;"></div>
+      </div>
+      <!-- Error Banner (hidden by default) -->
+      <div id="vendor-form-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; border-radius: 16px; padding: 18px 22px; margin-bottom: 24px; font-size: 0.88rem; font-weight: 600;"></div>
+
+      <form id="vendor-apply-form" onsubmit="submitVendorApplication(event)"
+        style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 24px; padding: 36px; box-shadow: 0 8px 25px rgba(0,0,0,0.05);">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Business Name *</label>
+            <input type="text" name="business_name" required placeholder="e.g. Mama Nkechi's Kitchen"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Business Type *</label>
+            <select name="business_type" required
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; background: #FFF; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+              <option value="">-- Select Type --</option>
+              <option value="Food & Restaurant">Food & Restaurant</option>
+              <option value="Supermarket & Groceries">Supermarket & Groceries</option>
+              <option value="Electronics & Phones">Electronics & Phones</option>
+              <option value="Building Materials">Building Materials & Construction</option>
+              <option value="Real Estate">Real Estate & Property</option>
+              <option value="Fashion & Clothing">Fashion & Clothing</option>
+              <option value="Pharmacy & Health">Pharmacy & Health</option>
+              <option value="Other">Other Business</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px;">
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Your Full Name *</label>
+            <input type="text" name="contact_name" required placeholder="e.g. Emeka Okafor"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Email Address *</label>
+            <input type="email" name="email" required placeholder="you@yourbusiness.com"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px;">
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Phone Number *</label>
+            <input type="tel" name="phone" required placeholder="+234 80X XXX XXXX"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">WhatsApp Number</label>
+            <input type="tel" name="whatsapp" placeholder="Same as phone or different"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px;">
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">City *</label>
+            <input type="text" name="city" required placeholder="e.g. Lagos, Abuja, Kano"
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">State *</label>
+            <select name="state" required
+              style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; background: #FFF; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+              <option value="">-- Select State --</option>
+              <option>Abia</option><option>Adamawa</option><option>Akwa Ibom</option><option>Anambra</option>
+              <option>Bauchi</option><option>Bayelsa</option><option>Benue</option><option>Borno</option>
+              <option>Cross River</option><option>Delta</option><option>Ebonyi</option><option>Edo</option>
+              <option>Ekiti</option><option>Enugu</option><option>FCT - Abuja</option><option>Gombe</option>
+              <option>Imo</option><option>Jigawa</option><option>Kaduna</option><option>Kano</option>
+              <option>Katsina</option><option>Kebbi</option><option>Kogi</option><option>Kwara</option>
+              <option>Lagos</option><option>Nasarawa</option><option>Niger</option><option>Ogun</option>
+              <option>Ondo</option><option>Osun</option><option>Oyo</option><option>Plateau</option>
+              <option>Rivers</option><option>Sokoto</option><option>Taraba</option><option>Yobe</option><option>Zamfara</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">About Your Business (Optional)</label>
+          <textarea name="message" rows="3" placeholder="Tell us about your products, typical order volume, or how you want to grow with RushPoint..."
+            style="width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: 12px; font-size: 0.9rem; outline: none; resize: vertical; transition: border-color 0.2s; font-family: inherit;"
+            onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'"></textarea>
+        </div>
+
+        <button type="submit" id="vendor-submit-btn"
+          style="width: 100%; margin-top: 22px; padding: 15px; background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; border: none; border-radius: 14px; font-size: 1rem; font-weight: 900; cursor: pointer; box-shadow: 0 6px 20px rgba(185,28,28,0.35); transition: all 0.2s; letter-spacing: -0.3px;">
+          Submit Partnership Application
+        </button>
+        <p style="text-align: center; font-size: 0.78rem; color: #94A3B8; margin-top: 12px;">Our team will contact you within 24 hours via WhatsApp or phone call.</p>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    async function submitVendorApplication(e) {
+      e.preventDefault();
+      const form = e.target;
+      const btn = document.getElementById('vendor-submit-btn');
+      const successBox = document.getElementById('vendor-form-success');
+      const errorBox = document.getElementById('vendor-form-error');
+
+      errorBox.style.display = 'none';
+      successBox.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Submitting Application...';
+
+      const data = {
+        business_name: form.business_name.value.trim(),
+        business_type: form.business_type.value,
+        contact_name: form.contact_name.value.trim(),
+        email: form.email.value.trim(),
+        phone: form.phone.value.trim(),
+        whatsapp: form.whatsapp.value.trim(),
+        city: form.city.value.trim(),
+        state: form.state.value,
+        message: form.message.value.trim()
+      };
+
+      try {
+        const res = await fetch('/api/auth/vendor-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.detail || json.message || 'Submission failed. Please try again.');
+        }
+        successBox.style.display = 'block';
+        document.getElementById('vendor-form-ref').textContent = 'Reference: ' + (json.request_ref || '');
+        form.reset();
+      } catch (err) {
+        errorBox.textContent = err.message || 'Something went wrong. Please check your details and try again.';
+        errorBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Partnership Application';
+      }
+    }
+  </script>
+
+  <!-- FAQ SECTION -->
+  <section class="section" id="faq" style="background: #F8FAFC;">
+    <div class="section-header">
+      <div class="section-tag">Got Questions?</div>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+    </div>
+
+    <div class="faq-container">
+      <div class="faq-item">
+        <div class="faq-question">How does RushPoint protect my money?</div>
+        <div class="faq-answer">All order payments are held in automated 4-way escrow. Funds are only transferred to the vendor and rider after the delivery is completed with your unique 4-digit PIN.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">Can I order from multiple vendors in one delivery?</div>
+        <div class="faq-answer">Yes! You can add products from various verified stores to your cart. RushPoint calculates the optimal courier route and combined delivery fee automatically.</div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-question">How do I download the mobile app on my phone?</div>
+        <div class="faq-answer">You can download the official RushPoint app on the Google Play Store for Android or the Apple App Store for iPhone. You can also use the high-speed Web App directly from any browser.</div>
+      </div>
+
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+          <img src="/static/img/rushpoint-logo-light.png" style="height: 42px; max-width: 200px; object-fit: contain;" alt="RushPoint Logistics">
+        </div>
+        <p style="font-size: 0.88rem; line-height: 1.6; max-width: 320px; color: #94A3B8;">
+          Africa's centralized multi-vendor marketplace, intelligent logistics dispatch, and secure escrow finance network.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Ecosystem</h4>
+        <ul>
+          <li><a href="/app">Customer Marketplace</a></li>
+          <li><a href="/app">Logistics & Waybills</a></li>
+          <li><a href="/invite-signup.html">Merchant Onboarding</a></li>
+          <li><a href="/invite-signup.html">Rider Onboarding</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Download Apps</h4>
+        <ul>
+          <li><a href="/static/downloads/rushpoint-app-v1.0-release.apk" download>Android App (.APK)</a></li>
+          <li><a href="/static/downloads/rushpoint-app-v1.0-release.ipa" download>iOS iPhone App (.IPA)</a></li>
+          <li><a href="/app">Launch Web App</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Support & Legal</h4>
+        <ul>
+          <li><a href="#security">Escrow Protection</a></li>
+          <li><a href="#faq">Help & FAQ</a></li>
+          <li><a href="mailto:support@rushingpoint.com">support@rushingpoint.com</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div>© 2026 RushPoint Technologies Ltd. All rights reserved.</div>
+      <div>
+        <a href="/admin" class="admin-link">Staff & Operations Portal 🔒</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
