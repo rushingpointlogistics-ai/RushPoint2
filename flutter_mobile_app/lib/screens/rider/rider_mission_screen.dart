@@ -109,38 +109,81 @@ class _RiderMissionScreenState extends State<RiderMissionScreen> {
 
   Future<void> _requestWithdrawal() async {
     final amtCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Withdraw Earnings'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Balance: ₦${(_wallet['balance'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 10),
-            TextField(controller: amtCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount to Withdraw', prefixText: '₦', border: OutlineInputBorder())),
-          ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Withdraw Rider Earnings 🏦'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Trip Balance: ₦${(_wallet['balance'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF7F1D1D))),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amtCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Amount (₦)', prefixText: '₦', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pinCtrl,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                decoration: const InputDecoration(
+                  labelText: '4-Digit Security PIN',
+                  prefixIcon: Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text('Enter your 4-digit transaction PIN to authorize.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
+              final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
+              final pin = pinCtrl.text.trim();
+              if (amt <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter valid amount.')));
+                return;
+              }
+              if (pin.length != 4) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter 4-digit Security PIN.')));
+                return;
+              }
               try {
                 final res = await ApiService.post('/api/finance/withdraw', {
-                  'amount': double.tryParse(amtCtrl.text.trim()) ?? 0.0,
+                  'amount': amt,
+                  'security_pin': pin,
                   'method': 'BANK_TRANSFER',
                 });
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(res['message'] ?? 'Withdrawal submitted!'), backgroundColor: Colors.green),
-                );
-                _loadRiderData();
+                if (res['success'] == true) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(res['message'] ?? 'Withdrawal submitted! ✅'), backgroundColor: Colors.green),
+                  );
+                  _loadRiderData();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(res['detail'] ?? 'Withdrawal failed. Verify PIN.'), backgroundColor: Colors.red),
+                  );
+                }
               } catch (_) {
                 Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Failed to request withdrawal. Check balance & PIN.')),
+                );
               }
             },
-            child: const Text('Request Withdrawal'),
+            child: const Text('Confirm & Withdraw 🔒'),
           ),
         ],
       ),

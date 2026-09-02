@@ -1,17 +1,59 @@
 import 'package:flutter/material.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/security_lock_screen.dart';
+import 'services/session_security_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const RushPointApp());
 }
 
-class RushPointApp extends StatelessWidget {
+class RushPointApp extends StatefulWidget {
   const RushPointApp({super.key});
+
+  @override
+  State<RushPointApp> createState() => _RushPointAppState();
+}
+
+class _RushPointAppState extends State<RushPointApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      SessionSecurityService.onAppPaused();
+    } else if (state == AppLifecycleState.resumed) {
+      if (SessionSecurityService.shouldLockOnResume() && !SessionSecurityService.isLocked) {
+        SessionSecurityService.isLocked = true;
+        _navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => SecurityLockScreen(
+              onUnlocked: () {
+                _navigatorKey.currentState?.pop();
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'RushPoint',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

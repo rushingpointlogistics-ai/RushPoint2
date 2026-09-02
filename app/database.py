@@ -114,6 +114,15 @@ def init_db():
     except Exception:
         pass
 
+    # Users transaction PIN migration
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN transaction_pin_hash TEXT DEFAULT NULL")
+    except Exception:
+        pass
+
+    except Exception:
+        pass
+
     # 5. Categories & Subcategories (Admin Controlled Only)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS categories (

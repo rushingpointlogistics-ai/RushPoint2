@@ -158,6 +158,14 @@ def create_expense(payload: dict, current_user: dict = Depends(require_role(["AD
 @router.get("/wallet/me")
 def get_my_wallet(current_user: dict = Depends(get_current_user)):
     conn = get_db_connection()
+    # 4-Digit Security PIN Validation for Withdrawals
+    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    if user_rec and user_rec["transaction_pin_hash"]:
+        entered_pin = str(payload.get("security_pin", "")).strip()
+        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
+
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -183,6 +191,14 @@ def top_up_wallet(payload: dict, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deposit amount must be greater than zero.")
         
     conn = get_db_connection()
+    # 4-Digit Security PIN Validation for Withdrawals
+    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    if user_rec and user_rec["transaction_pin_hash"]:
+        entered_pin = str(payload.get("security_pin", "")).strip()
+        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
+
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -226,6 +242,14 @@ def request_wallet_payout(payload: dict, current_user: dict = Depends(get_curren
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Withdrawal amount must be greater than zero.")
 
     conn = get_db_connection()
+    # 4-Digit Security PIN Validation for Withdrawals
+    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    if user_rec and user_rec["transaction_pin_hash"]:
+        entered_pin = str(payload.get("security_pin", "")).strip()
+        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
+
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet or wallet["balance"] < amount:
         conn.close()
@@ -410,6 +434,14 @@ def verify_online_payment(tx_ref: str, current_user: dict = Depends(get_current_
     Verifies transaction status with Flutterwave API and credits user wallet or updates order.
     """
     conn = get_db_connection()
+    # 4-Digit Security PIN Validation for Withdrawals
+    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    if user_rec and user_rec["transaction_pin_hash"]:
+        entered_pin = str(payload.get("security_pin", "")).strip()
+        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
+
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -622,3 +654,51 @@ def process_order_refund(payload: dict, current_user: dict = Depends(require_rol
         "message": f"Refund of ₦{refund_amount:,.2f} processed and credited to customer wallet.",
         "order_ref": order["order_ref"]
     }
+
+
+@router.get("/wallet/pin-status")
+def check_user_pin_status(current_user: dict = Depends(get_current_user)):
+    """
+    Checks if the user has configured a 4-digit transaction security PIN.
+    """
+    conn = get_db_connection()
+    user = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    conn.close()
+    has_pin = bool(user and user["transaction_pin_hash"])
+    return {"success": True, "has_security_pin": has_pin}
+
+
+@router.post("/wallet/set-security-pin")
+def set_transaction_security_pin(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Sets or updates the user's 4-digit transaction/withdrawal security PIN.
+    """
+    pin = str(payload.get("pin", "")).strip()
+    if len(pin) != 4 or not pin.isdigit():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Security PIN must be exactly 4 numeric digits.")
+
+    pin_hash = hash_password(pin)
+    conn = get_db_connection()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn.execute("UPDATE users SET transaction_pin_hash = ?, updated_at = ? WHERE id = ?", (pin_hash, now_iso, current_user["id"]))
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "message": "4-Digit Security PIN configured successfully."}
+
+
+@router.post("/wallet/verify-security-pin")
+def verify_transaction_security_pin(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Verifies the user's 4-digit transaction security PIN.
+    """
+    pin = str(payload.get("pin", "")).strip()
+    conn = get_db_connection()
+    user = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
+    conn.close()
+
+    if not user or not user["transaction_pin_hash"]:
+        return {"success": False, "verified": False, "detail": "No Security PIN has been set."}
+
+    is_valid = verify_password(pin, user["transaction_pin_hash"])
+    return {"success": True, "verified": is_valid}

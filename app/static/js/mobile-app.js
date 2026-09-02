@@ -85,11 +85,7 @@ const MobileApp = {
             </button>
           </div>
           <p style="font-size: 0.65rem; opacity: 0.75; color: var(--blood-tint); margin-bottom: 8px;">Vendors & Riders register via Admin Approved Invite Links</p>
-          <div style="border-top: 1px solid rgba(255,255,255,0.15); padding-top: 8px;">
-            <a href="/admin" target="_blank" style="font-size: 0.7rem; color: #FEE2E2; text-decoration: underline; font-weight: 700;">
-              💻 System Admin? Open Desktop Web Console ➔
-            </a>
-          </div>
+
         </div>
       </div>
     `;
