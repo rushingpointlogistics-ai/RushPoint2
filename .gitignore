@@ -32,3 +32,10 @@ mobile-release/ipa_temp/
 
 # Logs
 *.log
+
+# Flutter build artifacts
+.dart_tool/
+**/build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages

@@ -23,7 +23,9 @@ from app.routers import (
     finance,
     logistics,
     support,
-    audit
+    audit,
+    notifications,
+    promos
 )
 
 app = FastAPI(
@@ -121,6 +123,8 @@ app.include_router(finance.router)
 app.include_router(logistics.router)
 app.include_router(support.router)
 app.include_router(audit.router)
+app.include_router(notifications.router)
+app.include_router(promos.router)
 
 # Mount Static Assets
 static_dir = os.path.join(os.path.dirname(__file__), "static")

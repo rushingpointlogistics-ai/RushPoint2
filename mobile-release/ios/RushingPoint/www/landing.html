@@ -294,6 +294,34 @@
     }
     .admin-link:hover { color: #FECDD3; }
 
+    
+    /* Enhanced Platform Responsiveness */
+    @media (max-width: 1024px) {
+      .hero-title { font-size: 2.8rem; }
+      .navbar { padding: 14px 4%; }
+    }
+    @media (max-width: 768px) {
+      .hero-title { font-size: 2.1rem; line-height: 1.2; letter-spacing: -0.5px; }
+      .hero-subtitle { font-size: 1rem; margin-bottom: 24px; }
+      .hero-section { padding: 60px 4% 70px; }
+      .nav-links { display: none; }
+      .navbar { padding: 12px 4%; }
+      .download-badges { flex-direction: column; width: 100%; gap: 12px; }
+      .app-badge-btn { width: 100%; justify-content: center; padding: 14px 20px; }
+      .category-pills { justify-content: center; gap: 8px; }
+      .cat-pill { font-size: 0.78rem; padding: 8px 14px; }
+      .grid-3 { grid-template-columns: 1fr; gap: 18px; }
+      .role-grid { grid-template-columns: 1fr; gap: 18px; }
+      .section { padding: 50px 4%; }
+      .section-title { font-size: 1.8rem; }
+      .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+      .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+    }
+    @media (max-width: 420px) {
+      .hero-title { font-size: 1.8rem; }
+      .nav-actions .btn-nav:last-child { display: none; }
+    }
+
     @media (max-width: 768px) {
       .hero-title { font-size: 2.2rem; }
       .nav-links { display: none; }
@@ -320,7 +348,8 @@
     </ul>
 
     <div class="nav-actions">
-      <a href="/app" class="btn-nav btn-nav-primary">Launch Web App 🚀</a>
+      <a href="#download" class="btn-nav btn-nav-primary">Download Mobile App 📱</a>
+      <a href="/admin" class="btn-nav" style="background: rgba(255,255,255,0.12); color: #FFF; border: 1px solid rgba(255,255,255,0.25);">Admin Console 🔒</a>
     </div>
   </nav>
 
@@ -332,31 +361,40 @@
       RushPoint connects buyers, vetted merchants, and rapid dispatch riders across Africa. Trade with 100% financial escrow, live GPS tracking, and instant delivery.
     </p>
 
-    <div class="download-badges">
-      <!-- Android APK Release -->
-      <a href="/static/downloads/rushpoint-app-v1.0-release.apk" class="app-badge-btn" download>
+    <div class="download-badges" id="download">
+      <!-- Google Play Store -->
+      <a href="https://play.google.com/store/apps/details?id=com.deepseek.chat&hl=en" target="_blank" rel="noopener" class="app-badge-btn" style="background:#0F172A; border-color:#334155;">
         <div class="app-badge-icon">🤖</div>
         <div class="app-badge-text">
-          <div class="app-badge-sub">Download Android</div>
-          <div class="app-badge-main">Install APK</div>
+          <div class="app-badge-sub">Get it on</div>
+          <div class="app-badge-main">Google Play</div>
         </div>
       </a>
 
-      <!-- Apple iOS IPA Release -->
-      <a href="/static/downloads/rushpoint-app-v1.0-release.ipa" class="app-badge-btn" download>
+      <!-- Apple App Store -->
+      <a href="https://apps.apple.com/us/app/deepseek-ai-assistant/id6737597349" target="_blank" rel="noopener" class="app-badge-btn" style="background:#0F172A; border-color:#334155;">
         <div class="app-badge-icon">🍏</div>
         <div class="app-badge-text">
-          <div class="app-badge-sub">Download iPhone</div>
-          <div class="app-badge-main">Install IPA / App</div>
+          <div class="app-badge-sub">Download on the</div>
+          <div class="app-badge-main">App Store</div>
         </div>
       </a>
 
-      <!-- Instant Web App -->
-      <a href="/app" class="app-badge-btn" style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); border-color: #EF4444; box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45);">
-        <div class="app-badge-icon">🌐</div>
+      <!-- Direct Android APK -->
+      <a href="/static/downloads/rushpoint-app-v1.0-release.apk" download class="app-badge-btn" style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); border-color: #EF4444; box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45);">
+        <div class="app-badge-icon">📦</div>
         <div class="app-badge-text">
-          <div class="app-badge-sub">Instant Access</div>
-          <div class="app-badge-main">Launch Web App</div>
+          <div class="app-badge-sub">Direct Download</div>
+          <div class="app-badge-main">Android APK (.apk)</div>
+        </div>
+      </a>
+
+      <!-- Direct iOS IPA -->
+      <a href="/static/downloads/rushpoint-app-v1.0-release.ipa" download class="app-badge-btn" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border-color: #64748B;">
+        <div class="app-badge-icon">🍎</div>
+        <div class="app-badge-text">
+          <div class="app-badge-sub">Direct Download</div>
+          <div class="app-badge-main">iOS Package (.ipa)</div>
         </div>
       </a>
     </div>
@@ -712,9 +750,10 @@
       <div class="footer-col">
         <h4>Download Apps</h4>
         <ul>
-          <li><a href="/static/downloads/rushpoint-app-v1.0-release.apk" download>Android App (.APK)</a></li>
-          <li><a href="/static/downloads/rushpoint-app-v1.0-release.ipa" download>iOS iPhone App (.IPA)</a></li>
-          <li><a href="/app">Launch Web App</a></li>
+          <li><a href="https://play.google.com/store/apps/details?id=com.deepseek.chat&hl=en" target="_blank" rel="noopener">Google Play Store 🤖</a></li>
+          <li><a href="https://apps.apple.com/us/app/deepseek-ai-assistant/id6737597349" target="_blank" rel="noopener">Apple App Store 🍏</a></li>
+          <li><a href="/static/downloads/rushpoint-app-v1.0-release.apk" download>Direct Android APK (.apk)</a></li>
+          <li><a href="/static/downloads/rushpoint-app-v1.0-release.ipa" download>Direct iOS IPA (.ipa)</a></li>
         </ul>
       </div>
 

@@ -6,7 +6,7 @@ const API = {
     if (typeof window !== "undefined" && window.location.origin && window.location.origin !== "null" && window.location.protocol.startsWith("http")) {
       return window.location.origin;
     }
-    return localStorage.getItem("rp_api_endpoint") || "https://rushpoint.onrender.com";
+    return localStorage.getItem("rp_api_endpoint") || "https://rushpoint2.onrender.com";
   },
 
   get baseUrl() {

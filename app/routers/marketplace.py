@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from app.database import get_db_connection
 from app.security import get_current_user
 from app.models import CheckoutRequest
+from app.services.routing_service import calculate_road_distance_and_fee
+from app.routers.notifications import push_system_notification
 
 router = APIRouter(prefix="/api/marketplace", tags=["Customer Marketplace & Checkout"])
 
@@ -378,6 +380,35 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
         now_iso
     ))
     
+    # Push Real-Time Audio Notifications to Vendor and Customer
+    try:
+        # 1. Notify Vendor
+        vendor_user = conn.execute("SELECT user_id FROM vendors WHERE id = ?", (store["vendor_id"],)).fetchone()
+        if vendor_user:
+            push_system_notification(
+                conn=conn,
+                user_id=vendor_user["user_id"],
+                title="🔔 New Order Received!",
+                message=f"New order {order_ref} placed for {store['store_name']} (Total: ₦{total_amount:,.2f}).",
+                category="ORDER",
+                sound_type="bell",
+                order_ref=order_ref,
+                customer_phone=req.delivery_phone
+            )
+        # 2. Notify Customer
+        push_system_notification(
+            conn=conn,
+            user_id=current_user["id"],
+            title="✅ Order Placed Successfully",
+            message=f"Your order {order_ref} has been placed and is being prepared by {store['store_name']}.",
+            category="ORDER",
+            sound_type="chime",
+            order_ref=order_ref,
+            customer_phone=req.delivery_phone
+        )
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     

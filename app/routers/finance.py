@@ -564,3 +564,61 @@ async def flutterwave_webhook_endpoint(request: Request):
     conn.close()
     return {"status": "success", "message": "Flutterwave webhook event processed successfully."}
 
+
+
+@router.post("/withdraw")
+def withdraw_alias(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Alias endpoint for /wallet/withdraw for client compatibility.
+    """
+    return request_wallet_payout(payload, current_user)
+
+
+@router.post("/refunds/process")
+def process_order_refund(payload: dict, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Finance Officer"]))):
+    """
+    Audited instant refund endpoint. Credits refunded amount back to customer wallet.
+    """
+    order_id = payload.get("order_id")
+    refund_amount = float(payload.get("amount", 0))
+    reason = payload.get("reason", "Customer Requested Cancellation / Dispute Refund")
+
+    if not order_id or refund_amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="order_id and valid refund amount required.")
+
+    conn = get_db_connection()
+    order = conn.execute("SELECT * FROM orders WHERE id = ? OR order_ref = ?", (order_id, order_id)).fetchone()
+    if not order:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    customer_id = order["customer_id"]
+    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (customer_id,)).fetchone()
+
+    if wallet:
+        new_bal = wallet["balance"] + refund_amount
+        conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, now_iso, wallet["id"]))
+        tx_ref = f"RP-REF-{secrets.randbelow(900000) + 100000}"
+        conn.execute("""
+            INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+        """, (str(uuid.uuid4()), wallet["id"], customer_id, tx_ref, refund_amount, f"Refund: {reason}", new_bal, now_iso))
+
+    conn.execute("UPDATE orders SET status = 'REFUNDED', payment_status = 'REFUNDED', updated_at = ? WHERE id = ?", (now_iso, order["id"]))
+    conn.commit()
+    conn.close()
+
+    log_audit(
+        actor_user=current_user,
+        action="ORDER_REFUND_PROCESSED",
+        resource_type="orders",
+        resource_id=order["id"],
+        details={"order_ref": order["order_ref"], "amount": refund_amount, "reason": reason}
+    )
+
+    return {
+        "success": True,
+        "message": f"Refund of ₦{refund_amount:,.2f} processed and credited to customer wallet.",
+        "order_ref": order["order_ref"]
+    }

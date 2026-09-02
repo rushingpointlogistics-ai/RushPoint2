@@ -471,6 +471,50 @@ def init_db():
     )
     """)
 
+
+    # PROMOS & FLASH SALES (Temu-style time-limited promotions)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS promos (
+        id TEXT PRIMARY KEY,
+        promo_ref TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        promo_type TEXT NOT NULL, -- PERCENTAGE_DISCOUNT, FIXED_DISCOUNT, FREE_DELIVERY, FLASH_SALE
+        discount_value REAL NOT NULL DEFAULT 0.0,
+        scope TEXT NOT NULL DEFAULT 'ALL', -- ALL, SPECIFIC_VENDORS, SPECIFIC_PRODUCTS, SPECIFIC_CATEGORIES
+        target_ids TEXT, -- JSON array of vendor_ids or product_ids or category_ids
+        min_order_amount REAL NOT NULL DEFAULT 0.0,
+        max_discount_cap REAL, -- maximum discount capped at this NGN value
+        applies_to_delivery INTEGER NOT NULL DEFAULT 0, -- 1 = also discounts delivery fee
+        free_delivery INTEGER NOT NULL DEFAULT 0, -- 1 = completely free delivery
+        max_uses INTEGER, -- NULL = unlimited
+        uses_per_user INTEGER NOT NULL DEFAULT 1,
+        total_used INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'SCHEDULED', -- SCHEDULED, ACTIVE, EXPIRED, PAUSED, CANCELLED
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        banner_label TEXT, -- e.g. "BLACK FRIDAY", "FLASH SALE"
+        banner_color TEXT DEFAULT '#B91C1C', -- banner background
+        countdown_visible INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS promo_usages (
+        id TEXT PRIMARY KEY,
+        promo_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        order_id TEXT,
+        discount_applied REAL NOT NULL DEFAULT 0.0,
+        used_at TEXT NOT NULL,
+        FOREIGN KEY (promo_id) REFERENCES promos (id),
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+    """)
+
     conn.commit()
     conn.close()
     print("RushingPoint V1.0 Database schemas initialized successfully.")

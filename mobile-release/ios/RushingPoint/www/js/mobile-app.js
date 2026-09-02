@@ -47,7 +47,7 @@ const MobileApp = {
     container.innerHTML = `
       <div style="padding: 24px 20px; display: flex; flex-direction: column; height: 100%; justify-content: space-between; background: linear-gradient(180deg, var(--blood-dark) 0%, var(--blood-deeper) 100%); color: #FFFFFF;">
         <div style="text-align: center; margin-top: 12px; margin-bottom: 6px;">
-          <img src="/static/img/rushpoint-logo-light.png" style="height: 68px; max-width: 260px; object-fit: contain; margin: 0 auto 8px; display: block; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));" alt="RushPoint Logistics">
+          <img src="img/rushpoint-logo-light.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-light.png'" style="height: 68px; max-width: 260px; object-fit: contain; margin: 0 auto 8px; display: block; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));" alt="RushPoint Logistics">
           <p style="font-size: 0.75rem; font-weight: 700; opacity: 0.92; color: #FECACA; letter-spacing: 0.3px;">Marketplace • Instant Dispatch • Waybills • Finance</p>
         </div>
 
@@ -138,7 +138,7 @@ const MobileApp = {
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
         <div style="text-align: center; padding-top: 8px;">
-          <img src="/static/img/rushpoint-logo-transparent.png" style="height: 48px; object-fit: contain; margin: 0 auto 6px; display: block; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint">
+          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 48px; object-fit: contain; margin: 0 auto 6px; display: block; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint">
         </div>
         <div class="modal-header" style="padding-top: 0;">
           <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-primary);">🛍️ Create Customer Account</h3>
@@ -1705,7 +1705,7 @@ const MobileApp = {
       return `
         <!-- Top Branded RushPoint Bar -->
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 2px 4px;">
-          <img src="/static/img/rushpoint-logo-transparent.png" style="height: 38px; object-fit: contain; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint Logistics">
+          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 38px; object-fit: contain; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint Logistics">
           <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant Storefront</div>
         </div>
 

@@ -62,6 +62,33 @@ def list_products(
     
     return {"products": [dict(p) for p in products]}
 
+
+@router.get("/my-store")
+def list_my_store_products(current_user: dict = Depends(get_current_user)):
+    """Vendor-authenticated endpoint to list their own store's products."""
+    conn = get_db_connection()
+    # Get vendor's store
+    store = conn.execute("""
+        SELECT s.id FROM stores s
+        JOIN vendors v ON s.vendor_id = v.id
+        WHERE v.user_id = ?
+    """, (current_user['id'],)).fetchone()
+    
+    if not store:
+        conn.close()
+        return {"products": []}
+    
+    products = conn.execute("""
+        SELECT p.*, s.store_name, c.name as category_name
+        FROM products p
+        JOIN stores s ON p.store_id = s.id
+        JOIN categories c ON p.category_id = c.id
+        WHERE p.store_id = ?
+        ORDER BY p.created_at DESC
+    """, (store['id'],)).fetchall()
+    conn.close()
+    return {"products": [dict(p) for p in products]}
+
 @router.get("/{product_id}")
 def get_product_details(product_id: str):
     conn = get_db_connection()

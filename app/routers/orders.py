@@ -1,3 +1,4 @@
+from app.routers.notifications import push_system_notification
 import uuid
 import secrets
 from datetime import datetime, timezone
@@ -167,6 +168,31 @@ def transition_order_status(order_id: str, req: OrderStatusUpdate, current_user:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (str(uuid.uuid4()), order_id, current_status, new_status, current_user["id"], actor_label, req.notes or f"Status changed to {new_status}", now_iso))
     
+    # Push Real-Time Audio Notifications on Status Change
+    try:
+        sound = "arrival" if "ARRIVED" in new_status else ("success" if new_status == "DELIVERED" else "chime")
+        status_msg = {
+            "CONFIRMED": "Your order has been confirmed by the store.",
+            "ASSIGNED": "A courier has been assigned to your order.",
+            "PICKED_UP": "Rider has picked up your package from the store.",
+            "IN_TRANSIT": "Your order is now in transit with the rider.",
+            "ARRIVED": "Rider has arrived at the destination! Please prepare your 4-digit PIN.",
+            "DELIVERED": "Order delivered successfully! Thank you for choosing RushPoint.",
+            "CANCELLED": "Order was cancelled and payment refunded to your wallet."
+        }.get(new_status, f"Order status is now {new_status}")
+
+        push_system_notification(
+            conn=conn,
+            user_id=ord_row["customer_id"],
+            title=f"📦 Order {new_status.replace('_', ' ')}",
+            message=status_msg,
+            category="ORDER",
+            sound_type=sound,
+            order_ref=ord_row["order_ref"]
+        )
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     
