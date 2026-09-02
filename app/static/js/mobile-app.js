@@ -322,6 +322,7 @@ const MobileApp = {
     let categories = [];
     let products = [];
     let stores = [];
+    let orders = [];
 
     try {
       const wRes = await API.get("/api/finance/wallet/me", { silent: true });
@@ -332,6 +333,8 @@ const MobileApp = {
       if (pRes && pRes.products) products = pRes.products;
       const sRes = await API.get("/api/marketplace/stores", { silent: true });
       if (sRes && sRes.stores) stores = sRes.stores;
+      const oRes = await API.get("/api/orders/", { silent: true });
+      if (oRes && oRes.orders) orders = oRes.orders;
     } catch (e) {}
 
     const cartCount = this.cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -373,7 +376,7 @@ const MobileApp = {
 
         <!-- App Body Content -->
         <div class="mobile-content-area" id="mob-content-area">
-          ${this.getCustomerTabHtml(categories, products, stores, wallet, user)}
+          ${this.getCustomerTabHtml(categories, products, stores, wallet, user, orders)}
         </div>
 
         <!-- OPay Style 5-Tab Bottom Navigation -->
@@ -466,17 +469,11 @@ const MobileApp = {
               </div>
 
               <div class="mobile-drawer-section-title">Security & Account</div>
-              <div class="mobile-drawer-item" onclick="MobileApp.toggleDrawer(false); MobileApp.showChangePasswordModal();">
-                <span class="mobile-drawer-icon">🔒</span> <span>Change Password</span>
-              </div>
               <div class="mobile-drawer-item ${this.activeTab === 'account' ? 'active' : ''}" onclick="MobileApp.toggleDrawer(false); MobileApp.switchTab('account');">
                 <span class="mobile-drawer-icon">👤</span> <span>Account & Bank Profile</span>
               </div>
               <div class="mobile-drawer-item ${this.activeTab === 'support' ? 'active' : ''}" onclick="MobileApp.toggleDrawer(false); MobileApp.switchTab('support');">
-                <span class="mobile-drawer-icon">💬</span> <span>Customer Support Desk</span>
-              </div>
-              <div class="mobile-drawer-item" onclick="MobileApp.toggleDrawer(false); MobileApp.showHelpModal();">
-                <span class="mobile-drawer-icon">💬</span> <span>Customer Support Desk</span>
+                <span class="mobile-drawer-icon">💬</span> <span>Support & Live Help</span>
               </div>
             </div>
 
@@ -510,7 +507,7 @@ const MobileApp = {
     this.render();
   },
 
-  getCustomerTabHtml(categories, products, stores, wallet, user) {
+  getCustomerTabHtml(categories, products, stores, wallet, user, orders = []) {
     if (this.activeTab === "home") {
       if (this.browsingMode === "storefront" && this.viewingStore) {
         return this.renderStorefrontView(products);
@@ -711,7 +708,7 @@ const MobileApp = {
     }
 
     if (this.activeTab === "cart") return this.getCartHtml();
-    if (this.activeTab === "orders") return this.getCustomerOrdersHtml();
+    if (this.activeTab === "orders") return this.getCustomerOrdersHtml(orders);
     if (this.activeTab === "logistics") return this.getIndependentLogisticsHtml();
     if (this.activeTab === "support") return this.getCustomerSupportHtml();
     if (this.activeTab === "account") return this.getCustomerAccountHtml(wallet, user);
@@ -1289,12 +1286,7 @@ const MobileApp = {
     } catch (e) {}
   },
 
-  async getCustomerOrdersHtml() {
-    let orders = [];
-    try {
-      const res = await API.get("/api/orders/", { silent: true });
-      if (res && res.orders) orders = res.orders;
-    } catch (e) {}
+  getCustomerOrdersHtml(orders = []) {
 
     return `
       <div>
