@@ -81,7 +81,7 @@ def seed_database():
         VALUES (?, 'RP-VND-001', 'Alhaji Mustapha Almusik', 'almusik@rushingpoint.com', '+2348039876541', ?, 'VENDOR', 'ACTIVE', 'Vendor Merchant', 1, ?, ?)
     """, (v1_uid, hash_password("vendor123"), now_iso, now_iso))
 
-    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 25000.0, 'NGN', ?)", (str(uuid.uuid4()), v1_uid, now_iso))
+    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (str(uuid.uuid4()), v1_uid, now_iso))
 
     cursor.execute("""
         INSERT OR REPLACE INTO vendors (id, user_id, business_name, business_type, registration_number, tax_id, bank_name, account_number, account_name, kyc_status, commission_rate, created_at, updated_at)
@@ -114,7 +114,7 @@ def seed_database():
         VALUES (?, 'RP-VND-002', 'Mallam Sani Muhabbik', 'muhabbik@rushingpoint.com', '+2348031122334', ?, 'VENDOR', 'ACTIVE', 'Vendor Merchant', 1, ?, ?)
     """, (v2_uid, hash_password("vendor123"), now_iso, now_iso))
 
-    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 18000.0, 'NGN', ?)", (str(uuid.uuid4()), v2_uid, now_iso))
+    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (str(uuid.uuid4()), v2_uid, now_iso))
 
     cursor.execute("""
         INSERT OR REPLACE INTO vendors (id, user_id, business_name, business_type, registration_number, tax_id, bank_name, account_number, account_name, kyc_status, commission_rate, created_at, updated_at)
@@ -139,10 +139,10 @@ def seed_database():
 
     # 7. Four Distinct Riders
     riders_data = [
-        ("u-rider-moto-int", "RP-RDR-001", "Ibrahim Musa (Internal Rider)", "rider.internal.moto@rushingpoint.com", "+2348071112201", "INTERNAL", "MOTORCYCLE", "KTN-412-MTR", "DRV-KT-991101", 12.9900, 7.6010, 15000.0),
-        ("u-rider-moto-ext", "RP-RDR-002", "Usman Bello (External Rider)", "rider.external.moto@rushingpoint.com", "+2348071112202", "EXTERNAL_PARTNER", "MOTORCYCLE", "KTN-884-MTR", "DRV-KT-991102", 12.9880, 7.6030, 8500.0),
-        ("u-rider-tri-int", "RP-RDR-003", "Kabiru Sani (Internal Tricycle)", "rider.internal.tri@rushingpoint.com", "+2348071112203", "INTERNAL", "TRICYCLE", "KTN-519-KEKE", "DRV-KT-991103", 12.9920, 7.5980, 22000.0),
-        ("u-rider-tri-ext", "RP-RDR-004", "Aliyu Umar (External Tricycle)", "rider.external.tri@rushingpoint.com", "+2348071112204", "EXTERNAL_PARTNER", "TRICYCLE", "KTN-723-KEKE", "DRV-KT-991104", 12.9850, 7.6050, 11500.0)
+        ("u-rider-moto-int", "RP-RDR-001", "Ibrahim Musa (Internal Rider)", "rider.internal.moto@rushingpoint.com", "+2348071112201", "INTERNAL", "MOTORCYCLE", "KTN-412-MTR", "DRV-KT-991101", 12.9900, 7.6010, 0.0),
+        ("u-rider-moto-ext", "RP-RDR-002", "Usman Bello (External Rider)", "rider.external.moto@rushingpoint.com", "+2348071112202", "EXTERNAL_PARTNER", "MOTORCYCLE", "KTN-884-MTR", "DRV-KT-991102", 12.9880, 7.6030, 0.0),
+        ("u-rider-tri-int", "RP-RDR-003", "Kabiru Sani (Internal Tricycle)", "rider.internal.tri@rushingpoint.com", "+2348071112203", "INTERNAL", "TRICYCLE", "KTN-519-KEKE", "DRV-KT-991103", 12.9920, 7.5980, 0.0),
+        ("u-rider-tri-ext", "RP-RDR-004", "Aliyu Umar (External Tricycle)", "rider.external.tri@rushingpoint.com", "+2348071112204", "EXTERNAL_PARTNER", "TRICYCLE", "KTN-723-KEKE", "DRV-KT-991104", 12.9850, 7.6050, 0.0)
     ]
     for uid, rref, fname, email, phone, rtype, vtype, plate, lic, lat, lng, wbal in riders_data:
         cursor.execute("""
@@ -154,7 +154,7 @@ def seed_database():
 
         cursor.execute("""
             INSERT OR REPLACE INTO riders (id, user_id, rider_ref, rider_type, vehicle_type, plate_number, license_number, kyc_status, operational_status, current_lat, current_lng, last_ping_at, rating, total_deliveries, wallet_balance, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'APPROVED', 'AVAILABLE', ?, ?, ?, 5.0, 12, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'APPROVED', 'AVAILABLE', ?, ?, ?, 5.0, 0, ?, ?, ?)
         """, (str(uuid.uuid4()), uid, rref, rtype, vtype, plate, lic, lat, lng, now_iso, wbal, now_iso, now_iso))
 
     # 8. Clean Verified Customer
@@ -164,7 +164,7 @@ def seed_database():
         VALUES (?, 'RP-CUS-001', 'Fatima Abubakar', 'customer@rushingpoint.com', '+2348031234567', ?, 'CUSTOMER', 'ACTIVE', 'Verified Shopper', 1, ?, ?)
     """, (cust_uid, hash_password("customer123"), now_iso, now_iso))
 
-    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 50000.0, 'NGN', ?)", (str(uuid.uuid4()), cust_uid, now_iso))
+    cursor.execute("INSERT OR REPLACE INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (str(uuid.uuid4()), cust_uid, now_iso))
 
     # 9. Active 4-Hour Flash Sale Promo
     end_time = now + timedelta(hours=4)
