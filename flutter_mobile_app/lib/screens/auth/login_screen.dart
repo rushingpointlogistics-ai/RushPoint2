@@ -121,34 +121,34 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // App Brand Logo & Name
+                  // App Brand Logo with crisp white background
                   Container(
-                    width: 76,
-                    height: 76,
+                    width: 78,
+                    height: 78,
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(22),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFDC2626).withValues(alpha: 0.35),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                          color: Colors.black.withValues(alpha: 0.28),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
                         ),
                       ],
-                      border: Border.all(color: const Color(0xFFF87171).withValues(alpha: 0.4), width: 1.5),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'RP',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 1,
+                    child: Image.asset(
+                      'assets/images/rushpoint_logo_badge.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Center(
+                        child: Text(
+                          'RP',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF881337),
+                            letterSpacing: 1,
+                          ),
                         ),
                       ),
                     ),

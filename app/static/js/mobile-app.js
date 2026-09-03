@@ -47,8 +47,8 @@ const MobileApp = {
     container.innerHTML = `
       <div style="padding: 24px 20px; display: flex; flex-direction: column; min-height: 100%; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
         <div style="text-align: center; margin-top: 10px; margin-bottom: 8px;">
-          <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #991B1B 0%, #DC2626 100%); border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; box-shadow: 0 8px 25px rgba(220,38,38,0.4); border: 1.5px solid rgba(248,113,113,0.4);">
-            <span style="font-size: 1.8rem; font-weight: 900; color: #FFF; letter-spacing: 1px;">RP</span>
+          <div style="width: 72px; height: 72px; background: #FFFFFF; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; padding: 5px; box-shadow: 0 8px 25px rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.3);">
+            <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="width: 100%; height: 100%; object-fit: contain;" alt="RushPoint">
           </div>
           <h1 style="font-size: 1.6rem; font-weight: 900; letter-spacing: -0.5px; margin: 0; color: #FFF;">RushPoint</h1>
           <p style="font-size: 0.72rem; font-weight: 600; opacity: 0.9; color: #FECDD3; letter-spacing: 0.5px; margin-top: 2px;">Every Delivery, On Point.</p>
@@ -174,7 +174,7 @@ const MobileApp = {
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
         <div style="text-align: center; padding-top: 8px;">
-          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 48px; object-fit: contain; margin: 0 auto 6px; display: block; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint">
+          <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="height: 54px; width: 54px; border-radius: 14px; object-fit: contain; margin: 0 auto 8px; display: block; background: #FFFFFF; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);" alt="RushPoint">
         </div>
         <div class="modal-header" style="padding-top: 0;">
           <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-primary);">🛍️ Create Customer Account</h3>
@@ -1779,8 +1779,10 @@ const MobileApp = {
     if (this.vendorActiveTab === "dashboard") {
       return `
         <!-- Top Branded RushPoint Bar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 2px 4px;">
-          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 38px; object-fit: contain; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint Logistics">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="height: 38px; width: 38px; border-radius: 10px; object-fit: contain; background: #FFFFFF; padding: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" alt="RushPoint">
+            <span style="font-weight:900;font-size:1.05rem;color:#881337;">Rush<span style="color:#BE123C;">Point</span></span>
+          </div>
           <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant Storefront</div>
         </div>
 

@@ -66,11 +66,15 @@
       flex-shrink: 0;
     }
     .brand-logo-img {
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       border-radius: 12px;
-      object-fit: cover;
-      box-shadow: 0 0 16px rgba(225, 29, 72, 0.5);
+      object-fit: contain;
+      background: #FFFFFF;
+      padding: 3px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      display: block;
     }
     .brand-logo-fallback {
       width: 40px;
@@ -297,7 +301,15 @@
       border-bottom: 1px solid rgba(255,255,255,0.08);
     }
     .mockup-brand { display: flex; align-items: center; gap: 10px; }
-    .mockup-brand-logo { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; }
+    .mockup-brand-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: #FFFFFF;
+      padding: 3px;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    }
     .mockup-brand-logo-fb {
       width: 32px; height: 32px;
       background: linear-gradient(135deg, #881337 0%, #E11D48 100%);
@@ -482,7 +494,15 @@
       gap: 40px; padding-bottom: 36px; border-bottom: 1px solid var(--gray-800);
     }
     .footer-brand-logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; text-decoration: none; }
-    .footer-logo-img { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
+    .footer-logo-img {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: #FFFFFF;
+      padding: 3px;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    }
     .footer-logo-fb {
       width: 36px; height: 36px;
       background: linear-gradient(135deg, #881337, #E11D48);
