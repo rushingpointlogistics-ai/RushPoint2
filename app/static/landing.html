@@ -3,43 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>RushPoint — Smart Marketplace, Escrow & On-Demand Logistics</title>
-  <meta name="description" content="RushPoint is Nigeria's premier multi-vendor marketplace, road parcel delivery, and escrow logistics platform. Shop from verified physical stalls, dispatch waybills with live OSRM GPS tracking, and trade securely.">
+  <title>RushPoint Logistics — Nigeria's Smart Marketplace & On-Demand Courier</title>
+  <meta name="description" content="RushPoint is Nigeria's premier multi-vendor marketplace, real-time escrow, and on-demand courier platform. Shop from verified physical stalls, dispatch parcels with live GPS routing, and pay securely with Flutterwave.">
+  <meta name="theme-color" content="#881337">
+  <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" href="/static/img/icon-180x180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --blood-dark: #1E0207;
-      --blood-deeper: #120104;
-      --blood-primary: #881337;
-      --blood-crimson: #9F1239;
-      --blood-bright: #BE123C;
-      --blood-glow: #E11D48;
-      --blood-accent: #FB7185;
-      --blood-tint: #FFE4E6;
-      --blood-card: #2E030C;
-      --emerald-accent: #059669;
-      --gold-accent: #D97706;
-      --gray-50: #F8FAFC;
-      --gray-100: #F1F5F9;
-      --gray-200: #E2E8F0;
-      --gray-600: #475569;
-      --gray-700: #334155;
-      --gray-800: #1E293B;
-      --gray-900: #0F172A;
+      --rp-red:       #881337;
+      --rp-crimson:   #9F1239;
+      --rp-bright:    #BE123C;
+      --rp-glow:      #E11D48;
+      --rp-accent:    #FB7185;
+      --rp-rose-tint: #FFE4E6;
+      --rp-dark:      #1E0207;
+      --rp-darker:    #120104;
+      --rp-card-bg:   #2E030C;
+      --rp-emerald:   #059669;
+      --rp-amber:     #D97706;
+      --gray-50:      #F8FAFC;
+      --gray-100:     #F1F5F9;
+      --gray-200:     #E2E8F0;
+      --gray-400:     #94A3B8;
+      --gray-500:     #64748B;
+      --gray-600:     #475569;
+      --gray-700:     #334155;
+      --gray-800:     #1E293B;
+      --gray-900:     #0F172A;
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
-    body { background: #FAFAFA; color: var(--gray-900); overflow-x: hidden; line-height: 1.6; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #FAFAFA;
+      color: var(--gray-900);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
 
-    /* Navigation Bar */
+    /* NAVBAR */
     .navbar {
       position: sticky;
       top: 0;
-      background: rgba(30, 2, 7, 0.96);
-      backdrop-filter: blur(14px);
-      border-bottom: 1px solid rgba(225, 29, 72, 0.25);
+      background: rgba(18, 1, 4, 0.97);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(225, 29, 72, 0.2);
       z-index: 1000;
-      padding: 14px 6%;
+      padding: 0 6%;
+      height: 66px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -47,47 +61,47 @@
     .nav-brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 11px;
       text-decoration: none;
+      flex-shrink: 0;
     }
-    .brand-logo {
+    .brand-logo-img {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      object-fit: cover;
+      box-shadow: 0 0 16px rgba(225, 29, 72, 0.5);
+    }
+    .brand-logo-fallback {
       width: 40px;
       height: 40px;
       background: linear-gradient(135deg, #881337 0%, #E11D48 100%);
-      color: #FFF;
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 1.15rem;
-      box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4);
+      font-size: 1.1rem;
+      color: #FFF;
+      box-shadow: 0 0 16px rgba(225, 29, 72, 0.5);
     }
-    .brand-name {
-      font-size: 1.35rem;
-      font-weight: 900;
-      color: #FFFFFF;
-      letter-spacing: -0.5px;
-    }
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      list-style: none;
-    }
+    .brand-name { font-size: 1.3rem; font-weight: 900; color: #FFF; letter-spacing: -0.4px; }
+    .brand-name span { color: var(--rp-accent); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
     .nav-links a {
-      color: #F1F5F9;
+      color: rgba(255,255,255,0.75);
       text-decoration: none;
-      font-size: 0.88rem;
+      font-size: 0.87rem;
       font-weight: 600;
       transition: color 0.2s;
+      white-space: nowrap;
     }
-    .nav-links a:hover { color: #FECDD3; }
+    .nav-links a:hover { color: #FFF; }
     .nav-actions { display: flex; align-items: center; gap: 10px; }
     .btn-nav {
-      padding: 9px 18px;
+      padding: 9px 20px;
       border-radius: 12px;
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       font-weight: 800;
       text-decoration: none;
       transition: all 0.2s;
@@ -95,105 +109,128 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      border: none;
     }
     .btn-nav-primary {
       background: linear-gradient(135deg, #9F1239 0%, #E11D48 100%);
       color: #FFF;
-      box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4);
+      box-shadow: 0 4px 16px rgba(225, 29, 72, 0.38);
     }
-    .btn-nav-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 18px rgba(225, 29, 72, 0.6);
-    }
-    .btn-nav-outline {
-      background: rgba(255, 255, 255, 0.08);
+    .btn-nav-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(225, 29, 72, 0.55); }
+    .btn-nav-ghost {
+      background: rgba(255,255,255,0.08);
       color: #FFF;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255,255,255,0.18);
     }
-    .btn-nav-outline:hover {
-      background: rgba(255, 255, 255, 0.16);
-    }
-
-    /* Mobile Hamburger */
+    .btn-nav-ghost:hover { background: rgba(255,255,255,0.14); }
     .mobile-menu-btn {
       display: none;
-      background: none;
-      border: none;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
       color: #FFF;
-      font-size: 1.6rem;
+      font-size: 1.4rem;
       cursor: pointer;
+      border-radius: 10px;
+      width: 40px;
+      height: 40px;
+      align-items: center;
+      justify-content: center;
+    }
+    .mobile-nav-drawer {
+      display: none;
+      position: fixed;
+      top: 66px;
+      left: 0;
+      right: 0;
+      background: rgba(18, 1, 4, 0.99);
+      border-bottom: 1px solid rgba(225, 29, 72, 0.2);
+      padding: 20px 6%;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 999;
+    }
+    .mobile-nav-drawer.open { display: flex; }
+    .mobile-nav-drawer a {
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
     }
 
-    /* Hero Section */
+    /* HERO */
     .hero {
-      background: radial-gradient(circle at 50% 20%, #3B0411 0%, #1E0207 70%, #120104 100%);
+      background:
+        radial-gradient(ellipse at 0% 100%, rgba(159, 18, 57, 0.2) 0%, transparent 55%),
+        radial-gradient(ellipse at 100% 0%, rgba(225, 29, 72, 0.18) 0%, transparent 55%),
+        linear-gradient(170deg, #1E0207 0%, #2E030C 50%, #1E0207 100%);
       color: #FFF;
-      padding: 70px 6% 90px;
+      padding: 80px 6% 100px;
       position: relative;
       overflow: hidden;
     }
-    .hero::before {
+    .hero::after {
       content: '';
       position: absolute;
-      width: 500px;
-      height: 500px;
-      background: radial-gradient(circle, rgba(225, 29, 72, 0.15) 0%, transparent 70%);
-      top: -100px;
-      right: -100px;
-      border-radius: 50%;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Ccircle cx='30' cy='30' r='1.5' fill='%23E11D48' fill-opacity='0.04'/%3E%3C/g%3E%3C/svg%3E");
+      pointer-events: none;
     }
     .hero-container {
       max-width: 1200px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
-      gap: 48px;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 60px;
       align-items: center;
       position: relative;
       z-index: 2;
     }
-    .hero-badge {
+    .hero-eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: rgba(225, 29, 72, 0.2);
-      border: 1px solid rgba(251, 113, 133, 0.35);
-      padding: 6px 14px;
-      border-radius: 30px;
-      font-size: 0.78rem;
+      background: rgba(225, 29, 72, 0.18);
+      border: 1px solid rgba(251, 113, 133, 0.3);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 0.75rem;
       font-weight: 800;
-      color: #FFE4E6;
-      margin-bottom: 20px;
-      letter-spacing: 0.3px;
+      color: var(--rp-rose-tint);
+      margin-bottom: 22px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
     }
     .hero h1 {
-      font-size: 2.9rem;
+      font-size: 3.2rem;
       font-weight: 900;
-      line-height: 1.15;
-      letter-spacing: -1px;
-      margin-bottom: 18px;
+      line-height: 1.12;
+      letter-spacing: -1.2px;
+      margin-bottom: 20px;
     }
-    .hero h1 span {
-      background: linear-gradient(135deg, #FFE4E6 0%, #FB7185 100%);
+    .hero h1 .hl {
+      background: linear-gradient(135deg, #FFE4E6 0%, #FB7185 55%, #E11D48 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .hero p {
+    .hero-desc {
       font-size: 1.05rem;
-      color: #E2E8F0;
-      line-height: 1.6;
-      margin-bottom: 28px;
-      max-width: 540px;
+      color: rgba(255,255,255,0.72);
+      line-height: 1.7;
+      margin-bottom: 32px;
+      max-width: 520px;
     }
-    .hero-actions {
+    .hero-cta-row {
       display: flex;
       flex-wrap: wrap;
       gap: 14px;
       align-items: center;
-      margin-bottom: 32px;
+      margin-bottom: 36px;
     }
     .btn-hero {
-      padding: 14px 28px;
+      padding: 15px 30px;
       border-radius: 14px;
       font-size: 0.95rem;
       font-weight: 800;
@@ -201,553 +238,758 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      transition: all 0.2s;
+      transition: all 0.22s;
       cursor: pointer;
+      border: none;
+      white-space: nowrap;
     }
     .btn-hero-primary {
       background: linear-gradient(135deg, #BE123C 0%, #E11D48 100%);
       color: #FFF;
-      box-shadow: 0 8px 24px rgba(225, 29, 72, 0.45);
+      box-shadow: 0 8px 26px rgba(225, 29, 72, 0.45);
     }
-    .btn-hero-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 30px rgba(225, 29, 72, 0.6);
-    }
-    .btn-hero-secondary {
-      background: rgba(255, 255, 255, 0.1);
+    .btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(225, 29, 72, 0.6); }
+    .btn-hero-outline {
+      background: transparent;
       color: #FFF;
-      border: 1px solid rgba(255, 255, 255, 0.25);
+      border: 1.5px solid rgba(255,255,255,0.28);
     }
-    .btn-hero-secondary:hover {
-      background: rgba(255, 255, 255, 0.18);
-    }
+    .btn-hero-outline:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.5); }
 
-    /* Store Download Badges */
-    .store-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-    }
-    .store-badge-card {
-      display: flex;
+    .dl-badges { display: flex; flex-wrap: wrap; gap: 10px; }
+    .dl-badge {
+      display: inline-flex;
       align-items: center;
       gap: 10px;
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 8px 16px;
+      padding: 10px 18px;
       border-radius: 12px;
       text-decoration: none;
       color: #FFF;
+      font-size: 0.83rem;
+      font-weight: 700;
       transition: all 0.2s;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.35);
     }
-    .store-badge-card:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.4);
-      transform: translateY(-2px);
-    }
-    .store-badge-icon { font-size: 1.5rem; }
-    .store-badge-text { display: flex; flex-direction: column; }
-    .store-badge-sub { font-size: 0.6rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
-    .store-badge-title { font-size: 0.82rem; font-weight: 800; }
+    .dl-badge:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.38); transform: translateY(-1px); }
+    .dl-badge.android { background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.35); }
+    .dl-badge.ios     { background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.35); }
+    .dl-badge.web     { background: rgba(251, 113, 133, 0.15); border-color: rgba(251, 113, 133, 0.35); }
+    .dl-badge-icon { font-size: 1.4rem; }
+    .dl-badge-text { display: flex; flex-direction: column; line-height: 1.3; }
+    .dl-badge-label { font-size: 0.6rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; }
+    .dl-badge-title { font-size: 0.85rem; font-weight: 800; }
 
-    /* Hero Interactive Phone Card */
-    .hero-phone-mockup {
-      background: rgba(46, 3, 12, 0.7);
-      border: 1px solid rgba(225, 29, 72, 0.35);
+    /* Hero Right Calculator */
+    .hero-mockup {
+      background: linear-gradient(145deg, rgba(46, 3, 12, 0.9), rgba(30, 2, 7, 0.95));
+      border: 1px solid rgba(225, 29, 72, 0.3);
       border-radius: 28px;
-      padding: 24px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(12px);
+      padding: 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255,255,255,0.06);
     }
-    .mockup-header {
+    .mockup-topbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
-    .mockup-live-tag {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.72rem;
-      font-weight: 800;
-      color: #34D399;
+    .mockup-brand { display: flex; align-items: center; gap: 10px; }
+    .mockup-brand-logo { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; }
+    .mockup-brand-logo-fb {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #881337 0%, #E11D48 100%);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 0.8rem; color: #FFF;
     }
-    .mockup-live-dot {
-      width: 8px;
-      height: 8px;
-      background: #34D399;
-      border-radius: 50%;
-      animation: pulse 1.5s infinite;
+    .mockup-title { font-weight: 900; font-size: 0.9rem; color: #FFF; }
+    .mockup-sub { font-size: 0.65rem; color: rgba(255,255,255,0.5); }
+    .live-pill {
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(52, 211, 153, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      padding: 4px 10px; border-radius: 100px;
+      font-size: 0.68rem; font-weight: 800; color: #34D399;
     }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.3); opacity: 0.5; }
-    }
-
-    /* Live Calculator Box */
-    .calc-card {
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+    .live-dot { width: 7px; height: 7px; background: #34D399; border-radius: 50%; animation: blink 1.6s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.3)} }
+    .calc-section {
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.08);
       border-radius: 16px;
       padding: 16px;
       margin-bottom: 14px;
     }
-    .calc-title { font-size: 0.82rem; font-weight: 800; color: #FFE4E6; margin-bottom: 8px; }
-    .calc-select {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #FFF;
-      font-size: 0.8rem;
-      margin-bottom: 10px;
-      outline: none;
-    }
-    .calc-select option { background: #1E0207; color: #FFF; }
-    .calc-result-box {
-      background: rgba(5, 150, 105, 0.15);
-      border: 1px solid rgba(5, 150, 105, 0.35);
-      border-radius: 10px;
-      padding: 10px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    /* Stats Grid */
-    .stats-section {
-      background: #FFF;
-      padding: 40px 6%;
-      border-bottom: 1px solid var(--gray-200);
-    }
-    .stats-grid {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 24px;
-      text-align: center;
-    }
-    .stat-num {
-      font-size: 2.2rem;
-      font-weight: 900;
-      color: var(--blood-primary);
-      line-height: 1;
-      margin-bottom: 6px;
-    }
-    .stat-lbl {
-      font-size: 0.82rem;
-      font-weight: 700;
-      color: var(--gray-600);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    /* Features Grid */
-    .features-section {
-      padding: 80px 6%;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    .section-title-wrap {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-    .section-tag {
-      font-size: 0.78rem;
-      font-weight: 800;
-      color: var(--blood-bright);
-      text-transform: uppercase;
-      letter-spacing: 1px;
+    .calc-label {
+      font-size: 0.73rem; font-weight: 800;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase; letter-spacing: 0.5px;
       margin-bottom: 8px;
-      display: block;
     }
-    .section-title {
-      font-size: 2.1rem;
-      font-weight: 900;
-      color: var(--gray-900);
-      letter-spacing: -0.5px;
+    .calc-select {
+      width: 100%; padding: 10px 12px; border-radius: 10px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #FFF; font-size: 0.8rem; font-family: inherit; font-weight: 600;
+      outline: none; cursor: pointer; margin-bottom: 10px;
     }
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 28px;
+    .calc-select:focus { border-color: rgba(225, 29, 72, 0.6); }
+    .calc-select option { background: #1E0207; color: #FFF; }
+    .calc-select:last-child { margin-bottom: 0; }
+    .calc-result {
+      background: linear-gradient(135deg, rgba(5, 150, 105, 0.15), rgba(5, 150, 105, 0.08));
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      border-radius: 14px; padding: 14px 16px;
+      display: flex; justify-content: space-between; align-items: center;
     }
-    .feature-card {
-      background: #FFF;
-      border: 1px solid var(--gray-200);
-      border-radius: 20px;
-      padding: 28px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    .calc-fee-label { font-size: 0.65rem; color: #6EE7B7; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+    .calc-fee-amount { font-size: 1.5rem; font-weight: 900; color: #FFF; }
+    .calc-time-label { font-size: 0.65rem; color: rgba(255,255,255,0.5); text-align: right; }
+    .calc-time-val { font-size: 0.88rem; font-weight: 800; color: #FFF; text-align: right; }
+
+    /* TRUST STRIP */
+    .trust-strip { background: #FFF; border-bottom: 1px solid var(--gray-200); padding: 28px 6%; }
+    .trust-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: flex; justify-content: space-around; align-items: center;
+      flex-wrap: wrap; gap: 20px;
+    }
+    .trust-item { display: flex; align-items: center; gap: 12px; }
+    .trust-icon {
+      width: 46px; height: 46px;
+      background: var(--rp-rose-tint);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; flex-shrink: 0;
+    }
+    .trust-value { font-size: 1.6rem; font-weight: 900; color: var(--rp-red); line-height: 1; }
+    .trust-desc { font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.4px; }
+
+    /* HOW IT WORKS */
+    .section-wrap { max-width: 1200px; margin: 0 auto; padding: 90px 6%; }
+    .section-eyebrow {
+      font-size: 0.75rem; font-weight: 800; color: var(--rp-bright);
+      text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 10px; display: block;
+    }
+    .section-heading {
+      font-size: 2.2rem; font-weight: 900; color: var(--gray-900);
+      letter-spacing: -0.5px; margin-bottom: 14px; line-height: 1.2;
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--gray-500); max-width: 560px; line-height: 1.6; margin-bottom: 50px;
+    }
+    .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .step-card {
+      background: #FFF; border: 1px solid var(--gray-200);
+      border-radius: 20px; padding: 28px 22px;
       transition: all 0.25s;
     }
-    .feature-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 32px rgba(136, 19, 55, 0.08);
-      border-color: rgba(225, 29, 72, 0.3);
+    .step-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(136, 19, 55, 0.08); border-color: rgba(225, 29, 72, 0.25); }
+    .step-num {
+      font-size: 0.7rem; font-weight: 900; color: var(--rp-accent);
+      background: var(--rp-rose-tint); border-radius: 100px;
+      padding: 4px 10px; display: inline-block; margin-bottom: 14px; letter-spacing: 0.5px;
     }
-    .feature-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      background: var(--blood-tint);
-      color: var(--blood-bright);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      margin-bottom: 18px;
-    }
-    .feature-card h3 {
-      font-size: 1.15rem;
-      font-weight: 800;
-      margin-bottom: 8px;
-      color: var(--gray-900);
-    }
-    .feature-card p {
-      font-size: 0.88rem;
-      color: var(--gray-600);
-      line-height: 1.6;
-    }
+    .step-icon { font-size: 1.8rem; margin-bottom: 12px; }
+    .step-card h3 { font-size: 1.05rem; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+    .step-card p { font-size: 0.84rem; color: var(--gray-500); line-height: 1.6; }
 
-    /* Direct Download Banner */
-    .download-cta {
-      background: radial-gradient(circle at 50% 50%, #3B0411 0%, #1E0207 100%);
-      color: #FFF;
-      padding: 70px 6%;
-      text-align: center;
-      border-radius: 28px;
-      max-width: 1200px;
-      margin: 40px auto 80px;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 20px 50px rgba(30, 2, 7, 0.4);
+    /* FEATURES */
+    .features-bg { background: linear-gradient(180deg, #FAFAFA 0%, #F1F5F9 100%); padding: 90px 6%; }
+    .features-inner { max-width: 1200px; margin: 0 auto; }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .feature-card {
+      background: #FFF; border: 1px solid var(--gray-200);
+      border-radius: 22px; padding: 30px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+      transition: all 0.25s;
     }
-    .download-cta h2 {
-      font-size: 2.3rem;
-      font-weight: 900;
-      margin-bottom: 14px;
+    .feature-card:hover { transform: translateY(-5px); box-shadow: 0 14px 36px rgba(136, 19, 55, 0.07); border-color: rgba(225, 29, 72, 0.28); }
+    .feature-icon-wrap {
+      width: 54px; height: 54px; background: var(--rp-rose-tint);
+      border-radius: 16px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.55rem; margin-bottom: 18px;
     }
-    .download-cta p {
-      font-size: 1rem;
-      color: #FFE4E6;
-      max-width: 580px;
-      margin: 0 auto 28px;
-    }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+    .feature-card p { font-size: 0.86rem; color: var(--gray-500); line-height: 1.65; }
 
-    /* Footer */
+    /* PRICING */
+    .pricing-section { background: var(--rp-dark); padding: 90px 6%; }
+    .pricing-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
+    }
+    .pricing-text .section-eyebrow { color: var(--rp-accent); }
+    .pricing-text .section-heading { color: #FFF; }
+    .pricing-text .section-sub { color: rgba(255,255,255,0.6); margin-bottom: 32px; }
+    .pricing-rule { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
+    .rule-badge {
+      width: 38px; height: 38px;
+      background: rgba(225, 29, 72, 0.18);
+      border: 1px solid rgba(251, 113, 133, 0.3);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; flex-shrink: 0;
+    }
+    .rule-text h4 { font-size: 0.92rem; font-weight: 800; color: #FFF; margin-bottom: 3px; }
+    .rule-text p { font-size: 0.82rem; color: rgba(255,255,255,0.55); line-height: 1.5; }
+    .pricing-card {
+      background: rgba(46, 3, 12, 0.7);
+      border: 1px solid rgba(225, 29, 72, 0.25);
+      border-radius: 24px; padding: 28px;
+    }
+    .pricing-card-title {
+      font-size: 0.8rem; font-weight: 800; color: var(--rp-accent);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 18px;
+    }
+    .pricing-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .pricing-row:last-child { border-bottom: none; }
+    .pricing-row-label { font-size: 0.85rem; color: rgba(255,255,255,0.65); }
+    .pricing-row-value { font-size: 0.9rem; font-weight: 800; color: #FFF; }
+    .pricing-row-value.emerald { color: #34D399; }
+    .pricing-row-value.amber  { color: #FCD34D; }
+
+    /* DOWNLOAD CTA */
+    .download-section {
+      background: radial-gradient(ellipse at 50% 0%, #3B0411 0%, #1E0207 70%);
+      padding: 100px 6%; text-align: center; color: #FFF; position: relative; overflow: hidden;
+    }
+    .download-section::before {
+      content: ''; position: absolute;
+      top: -80px; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 400px;
+      background: radial-gradient(circle, rgba(225, 29, 72, 0.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .download-section h2 { font-size: 2.6rem; font-weight: 900; letter-spacing: -0.8px; margin-bottom: 14px; }
+    .download-section p { font-size: 1.05rem; color: rgba(255,255,255,0.65); max-width: 560px; margin: 0 auto 36px; line-height: 1.65; }
+    .download-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-bottom: 28px; position: relative; z-index: 2; }
+    .ios-note { font-size: 0.75rem; color: rgba(255,255,255,0.38); max-width: 480px; margin: 0 auto; line-height: 1.5; position: relative; z-index: 2; }
+
+    /* FOOTER */
     footer {
-      background: #0F172A;
-      color: #94A3B8;
-      padding: 50px 6% 30px;
-      border-top: 1px solid #1E293B;
+      background: var(--gray-900); color: var(--gray-400);
+      padding: 56px 6% 28px; border-top: 1px solid var(--gray-800);
     }
-    .footer-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: 2fr 1fr 1fr;
-      gap: 40px;
-      padding-bottom: 30px;
-      border-bottom: 1px solid #1E293B;
+    .footer-grid {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr;
+      gap: 40px; padding-bottom: 36px; border-bottom: 1px solid var(--gray-800);
     }
-    .footer-brand h4 { font-size: 1.3rem; font-weight: 900; color: #FFF; margin-bottom: 10px; }
-    .footer-links h5 { font-size: 0.88rem; font-weight: 800; color: #FFF; margin-bottom: 14px; text-transform: uppercase; }
-    .footer-links ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-    .footer-links a { color: #94A3B8; text-decoration: none; font-size: 0.82rem; transition: color 0.2s; }
-    .footer-links a:hover { color: #FFF; }
+    .footer-brand-logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; text-decoration: none; }
+    .footer-logo-img { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
+    .footer-logo-fb {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #881337, #E11D48);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1rem; color: #FFF;
+    }
+    .footer-brand-name { font-size: 1.15rem; font-weight: 900; color: #FFF; }
+    .footer-desc { font-size: 0.83rem; color: var(--gray-400); line-height: 1.65; max-width: 300px; }
+    .footer-col h5 {
+      font-size: 0.78rem; font-weight: 800; color: #FFF;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 18px;
+    }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .footer-col a { color: var(--gray-400); text-decoration: none; font-size: 0.84rem; transition: color 0.2s; }
+    .footer-col a:hover { color: #FFF; }
     .footer-bottom {
-      max-width: 1200px;
-      margin: 20px auto 0;
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.75rem;
+      max-width: 1200px; margin: 22px auto 0;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.74rem; flex-wrap: wrap; gap: 10px;
+    }
+    .footer-badges { display: flex; gap: 12px; flex-wrap: wrap; }
+    .footer-badge {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      padding: 4px 10px; border-radius: 6px; font-size: 0.68rem; font-weight: 700; color: var(--gray-400);
     }
 
-    /* Cross-Platform Responsive Breakpoints */
-    @media (max-width: 992px) {
-      .hero-container { grid-template-columns: 1fr; gap: 36px; }
+    /* RESPONSIVE */
+    @media (max-width: 1100px) {
+      .steps-grid { grid-template-columns: repeat(2, 1fr); }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 900px) {
+      .hero-container { grid-template-columns: 1fr; gap: 40px; }
+      .hero-mockup { max-width: 480px; }
       .features-grid { grid-template-columns: 1fr 1fr; }
-      .stats-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
-      .footer-container { grid-template-columns: 1fr 1fr; }
+      .pricing-inner { grid-template-columns: 1fr; gap: 40px; }
     }
     @media (max-width: 768px) {
       .nav-links { display: none; }
-      .mobile-menu-btn { display: block; }
-      .hero { padding: 45px 5% 60px; }
-      .hero h1 { font-size: 2.1rem; }
-      .hero p { font-size: 0.92rem; }
+      .nav-actions .btn-nav-ghost { display: none; }
+      .mobile-menu-btn { display: flex; }
+      .hero { padding: 50px 5% 70px; }
+      .hero h1 { font-size: 2.2rem; }
+      .hero-desc { font-size: 0.95rem; }
       .features-grid { grid-template-columns: 1fr; }
-      .stats-grid { grid-template-columns: 1fr 1fr; }
-      .section-title { font-size: 1.7rem; }
-      .download-cta { padding: 40px 5%; margin: 20px 4% 50px; }
-      .download-cta h2 { font-size: 1.7rem; }
-      .footer-container { grid-template-columns: 1fr; gap: 24px; }
-      .footer-bottom { flex-direction: column; gap: 10px; text-align: center; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .section-heading { font-size: 1.75rem; }
+      .download-section h2 { font-size: 1.9rem; }
+      .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+      .footer-bottom { flex-direction: column; text-align: center; }
+      .trust-inner { flex-direction: column; align-items: flex-start; gap: 16px; }
+    }
+    @media (max-width: 480px) {
+      .hero h1 { font-size: 1.9rem; letter-spacing: -0.5px; }
+      .btn-hero { padding: 13px 22px; font-size: 0.88rem; }
+      .dl-badges { flex-direction: column; }
+      .hero-cta-row { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Sticky Navigation Bar -->
-  <header class="navbar">
-    <a href="/" class="nav-brand">
-      <div class="brand-logo">RP</div>
-      <span class="brand-name">RushPoint</span>
-    </a>
-    <ul class="nav-links">
-      <li><a href="#features">Features</a></li>
-      <li><a href="#calculator">Live Pricing</a></li>
-      <li><a href="#vendors">Merchants</a></li>
-      <li><a href="#download">Download App</a></li>
-    </ul>
-    <div class="nav-actions">
-      <a href="/app" class="btn-nav btn-nav-primary">
-        <span>📱 Open Mobile App</span>
-      </a>
-      <button class="mobile-menu-btn" onclick="alert('Menu: Open App, Download APK, or View Features below.')">☰</button>
-    </div>
-  </header>
+<!-- NAVBAR -->
+<header class="navbar">
+  <a href="/" class="nav-brand">
+    <img src="/static/img/rushpoint-logo.png" alt="RushPoint Logo" class="brand-logo-img"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="brand-logo-fallback" style="display:none">RP</div>
+    <span class="brand-name">Rush<span>Point</span></span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">How It Works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#calculator">Live Pricing</a></li>
+    <li><a href="#download">Download</a></li>
+    <li><a href="/invite-signup.html">Become a Partner</a></li>
+  </ul>
+  <div class="nav-actions">
+    <a href="/app" class="btn-nav btn-nav-ghost">🌐 Web App</a>
+    <a href="/app" class="btn-nav btn-nav-primary">📱 Open App</a>
+    <button class="mobile-menu-btn" onclick="toggleMobileNav()" aria-label="Menu">&#9776;</button>
+  </div>
+</header>
 
-  <!-- Hero Section with Live Showcase -->
-  <section class="hero">
-    <div class="hero-container">
-      <div>
-        <div class="hero-badge">
-          <span>⚡</span>
-          <span>AFRICA'S FASTEST ESCROW & SMART LOGISTICS PLATFORM</span>
-        </div>
-        <h1>Every Delivery, <span>On Point.</span></h1>
-        <p>
-          Shop directly from verified physical stalls, dispatch inter-state road parcels with live OSRM GPS routing, and transact safely with 4-way OTP escrow protection.
-        </p>
-        <div class="hero-actions">
-          <a href="#download" class="btn-hero btn-hero-primary">
-            <span>📥 Download Mobile App</span>
-          </a>
-          <a href="#calculator" class="btn-hero btn-hero-secondary">
-            <span>🗺️ Calculate Delivery Fee</span>
-          </a>
-        </div>
+<div class="mobile-nav-drawer" id="mobileNav">
+  <a href="#how-it-works" onclick="toggleMobileNav()">How It Works</a>
+  <a href="#features" onclick="toggleMobileNav()">Features</a>
+  <a href="#calculator" onclick="toggleMobileNav()">Live Pricing Calculator</a>
+  <a href="#download" onclick="toggleMobileNav()">Download App</a>
+  <a href="/invite-signup.html" onclick="toggleMobileNav()">Become a Partner</a>
+  <a href="/app" onclick="toggleMobileNav()" style="color:#FB7185;">Open Web App &rarr;</a>
+</div>
 
-        <!-- App Store & Google Play Badges -->
-        <div class="store-badges">
-          <a href="https://play.google.com/store/apps/details?id=com.deepseek.chat&hl=en" target="_blank" class="store-badge-card">
-            <span class="store-badge-icon">🤖</span>
-            <div class="store-badge-text">
-              <span class="store-badge-sub">GET IT ON</span>
-              <span class="store-badge-title">Google Play</span>
-            </div>
-          </a>
-          <a href="https://apps.apple.com/us/app/deepseek-ai-assistant/id6737597349" target="_blank" class="store-badge-card">
-            <span class="store-badge-icon">🍏</span>
-            <div class="store-badge-text">
-              <span class="store-badge-sub">DOWNLOAD ON THE</span>
-              <span class="store-badge-title">App Store</span>
-            </div>
-          </a>
-          <a href="/downloads/rushpoint-app-v1.0-release.apk" class="store-badge-card" style="background: rgba(225, 29, 72, 0.25); border-color: rgba(251, 113, 133, 0.4);">
-            <span class="store-badge-icon">📦</span>
-            <div class="store-badge-text">
-              <span class="store-badge-sub">DIRECT FILE</span>
-              <span class="store-badge-title">Download APK</span>
-            </div>
-          </a>
-        </div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-container">
+    <div>
+      <div class="hero-eyebrow"><span>&#9889;</span><span>Nigeria's Smartest Logistics Platform</span></div>
+      <h1>Every Delivery,<br><span class="hl">Perfectly Measured.</span></h1>
+      <p class="hero-desc">
+        Shop directly from verified physical stalls. Send parcels across town or state with live OSRM road routing.
+        Pay with card, bank transfer, USSD, or wallet — all secured by 4-digit delivery PIN escrow.
+      </p>
+      <div class="hero-cta-row">
+        <a href="#download" class="btn-hero btn-hero-primary">&#128229; Download the App</a>
+        <a href="/app" class="btn-hero btn-hero-outline">&#127758; Try Web App</a>
       </div>
+      <div class="dl-badges">
+        <a href="/downloads/rushpoint-app-v1.0-release.apk" class="dl-badge android">
+          <span class="dl-badge-icon">&#129302;</span>
+          <div class="dl-badge-text">
+            <span class="dl-badge-label">Android APK</span>
+            <span class="dl-badge-title">Download APK</span>
+          </div>
+        </a>
+        <a href="itms-services://?action=download-manifest&url=https://rushpoint2.onrender.com/download/ios-manifest.plist"
+           id="ios-hero-btn" class="dl-badge ios">
+          <span class="dl-badge-icon">&#127823;</span>
+          <div class="dl-badge-text">
+            <span class="dl-badge-label">iOS Install</span>
+            <span class="dl-badge-title">Install on iPhone</span>
+          </div>
+        </a>
+        <a href="/app" class="dl-badge web">
+          <span class="dl-badge-icon">&#127758;</span>
+          <div class="dl-badge-text">
+            <span class="dl-badge-label">Browser PWA</span>
+            <span class="dl-badge-title">Open Web App</span>
+          </div>
+        </a>
+      </div>
+    </div>
 
-      <!-- Live Interactive Route Calculator Card -->
-      <div class="hero-phone-mockup" id="calculator">
-        <div class="mockup-header">
+    <!-- Live Delivery Calculator -->
+    <div class="hero-mockup" id="calculator">
+      <div class="mockup-topbar">
+        <div class="mockup-brand">
+          <img src="/static/img/emblem-192x192.png" alt="RP" class="mockup-brand-logo"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="mockup-brand-logo-fb" style="display:none">RP</div>
           <div>
-            <div style="font-weight: 900; font-size: 0.95rem; color: #FFF;">Live Road Delivery Calculator</div>
-            <div style="font-size: 0.68rem; color: #FECDD3;">Powered by OSRM Smart Router</div>
-          </div>
-          <div class="mockup-live-tag">
-            <div class="mockup-live-dot"></div>
-            <span>LIVE OSRM</span>
+            <div class="mockup-title">Live Delivery Calculator</div>
+            <div class="mockup-sub">Powered by OSRM Smart Router</div>
           </div>
         </div>
+        <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+      </div>
 
-        <div class="calc-card">
-          <div class="calc-title">🏪 Step 1: Select Verified Pickup Stall</div>
-          <select id="calc-pickup" class="calc-select" onchange="calculateLiveQuote()">
-            <option value="12.9908,7.6018|Almusik Venture (Katsina Central Market)">Almusik Venture (Central Commercial Market)</option>
-            <option value="12.9820,7.5950|Muhabbik Bread & Bakery (GRA Road)">Muhabbik Bread & Bakery (GRA Main Road)</option>
-          </select>
+      <div class="calc-section">
+        <div class="calc-label">&#127978; Vendor / Pickup Location</div>
+        <select id="calc-pickup" class="calc-select" onchange="calculateLiveQuote()">
+          <option value="12.9908,7.6018">Almusik Venture &mdash; Katsina Central Market</option>
+          <option value="12.9820,7.5950">Muhabbik Bread &amp; Bakery &mdash; GRA Main Road</option>
+        </select>
+        <div class="calc-label">&#128205; Customer Delivery Destination</div>
+        <select id="calc-dest" class="calc-select" onchange="calculateLiveQuote()">
+          <option value="13.0050,7.6180,5.2">Katsina City Gate &amp; Ring Road (&asymp;5.2 km)</option>
+          <option value="12.9820,7.5950,2.1">GRA Residential District (&asymp;2.1 km)</option>
+          <option value="12.9500,7.5800,8.4">Batagarawa Commercial Junction (&asymp;8.4 km)</option>
+          <option value="12.8950,7.6320,12.0">UMYU University Campus (&asymp;12.0 km)</option>
+        </select>
+        <div class="calc-label">&#128661; Vehicle / Cargo Type</div>
+        <select id="calc-vehicle" class="calc-select" onchange="calculateLiveQuote()">
+          <option value="1.0">Motorcycle &mdash; Standard Parcel / Food / Groceries</option>
+          <option value="1.6">Tricycle / Keke &mdash; Bulky / Heavy Cargo</option>
+        </select>
+      </div>
 
-          <div class="calc-title">📍 Step 2: Select Customer Destination</div>
-          <select id="calc-dest" class="calc-select" onchange="calculateLiveQuote()">
-            <option value="13.0050,7.6180|Katsina City Gate & Ring Road">Katsina City Gate & Ring Road (5.2 km)</option>
-            <option value="12.9820,7.5950|GRA Residential Area">GRA Residential Area (2.1 km)</option>
-            <option value="12.9500,7.5800|Batagarawa Commercial Junction">Batagarawa Commercial Junction (8.4 km)</option>
-          </select>
-
-          <div class="calc-title">🏍️ Vehicle / Cargo Type</div>
-          <select id="calc-vehicle" class="calc-select" onchange="calculateLiveQuote()">
-            <option value="MOTORCYCLE|1.0">Motorcycle Courier (Standard Parcel / Food / Groceries)</option>
-            <option value="TRICYCLE|1.6">Tricycle / Keke Napep (Bulky / Heavy Cargo / Sacks)</option>
-          </select>
+      <div class="calc-result">
+        <div>
+          <div class="calc-fee-label">Road Distance Fee</div>
+          <div class="calc-fee-amount" id="calc-fee-display">&#8358;1,824.00</div>
         </div>
-
-        <div class="calc-result-box">
-          <div>
-            <div style="font-size: 0.68rem; color: #D1FAE5; text-transform: uppercase; font-weight: 700;">Calculated Road Fee</div>
-            <div id="calc-fee-display" style="font-size: 1.35rem; font-weight: 900; color: #FFF;">₦1,450.00</div>
-          </div>
-          <div style="text-align: right;">
-            <div style="font-size: 0.68rem; color: #D1FAE5;">Est. Travel Time</div>
-            <div id="calc-time-display" style="font-size: 0.88rem; font-weight: 800; color: #FFF;">~14 mins</div>
-          </div>
+        <div>
+          <div class="calc-time-label">Estimated Time</div>
+          <div class="calc-time-val" id="calc-time-display">~17 mins</div>
+          <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);text-align:right;margin-top:2px" id="calc-km-display">5.2 km road route</div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Live Statistics Section -->
-  <section class="stats-section">
-    <div class="stats-grid">
-      <div>
-        <div class="stat-num">₦0.00</div>
-        <div class="stat-lbl">Real Escrow Transparency</div>
-      </div>
-      <div>
-        <div class="stat-num">80%</div>
-        <div class="stat-lbl">Rider Fair Delivery Share</div>
-      </div>
-      <div>
-        <div class="stat-num">100%</div>
-        <div class="stat-lbl">Merchant Product Price Retained</div>
-      </div>
-      <div>
-        <div class="stat-num">4-Digit</div>
-        <div class="stat-lbl">POD PIN Delivery Security</div>
-      </div>
+
+<!-- TRUST STRIP -->
+<section class="trust-strip">
+  <div class="trust-inner">
+    <div class="trust-item">
+      <div class="trust-icon">&#128506;</div>
+      <div><div class="trust-value">OSRM</div><div class="trust-desc">Live Road Distance Pricing</div></div>
     </div>
-  </section>
-
-  <!-- Platform Core Capabilities -->
-  <section class="features-section" id="features">
-    <div class="section-title-wrap">
-      <span class="section-tag">BUILT FOR SPEED & SECURITY</span>
-      <h2 class="section-title">Designed for Africa's Modern Commerce</h2>
+    <div class="trust-item">
+      <div class="trust-icon">&#128179;</div>
+      <div><div class="trust-value">4-Way</div><div class="trust-desc">Payment Methods</div></div>
     </div>
+    <div class="trust-item">
+      <div class="trust-icon">&#128274;</div>
+      <div><div class="trust-value">4-PIN</div><div class="trust-desc">OTP Delivery Escrow</div></div>
+    </div>
+    <div class="trust-item">
+      <div class="trust-icon">&#128661;</div>
+      <div><div class="trust-value">80%</div><div class="trust-desc">Fair Rider Commission</div></div>
+    </div>
+    <div class="trust-item">
+      <div class="trust-icon">&#128737;</div>
+      <div><div class="trust-value">SSL</div><div class="trust-desc">256-Bit Encrypted</div></div>
+    </div>
+  </div>
+</section>
 
+
+<!-- HOW IT WORKS -->
+<section class="section-wrap" id="how-it-works">
+  <div style="text-align:center; margin-bottom:50px;">
+    <span class="section-eyebrow">Simple &amp; Transparent</span>
+    <h2 class="section-heading">How RushPoint Works</h2>
+    <p class="section-sub" style="margin:0 auto;text-align:center;">
+      From browsing your favourite physical stall to receiving your package at the door &mdash; fast, fair, and fully tracked.
+    </p>
+  </div>
+  <div class="steps-grid">
+    <div class="step-card">
+      <span class="step-num">STEP 01</span>
+      <div class="step-icon">&#128717;</div>
+      <h3>Browse &amp; Add to Cart</h3>
+      <p>Explore verified physical merchant stalls &mdash; groceries, bakeries, hardware, and more. Add items to your cart with one tap.</p>
+    </div>
+    <div class="step-card">
+      <span class="step-num">STEP 02</span>
+      <div class="step-icon">&#128205;</div>
+      <h3>Your GPS Sets the Fee</h3>
+      <p>The app reads your GPS or manual address. Real OSRM road distance between vendor stall and your location calculates the exact delivery fee &mdash; no flat rate surprises.</p>
+    </div>
+    <div class="step-card">
+      <span class="step-num">STEP 03</span>
+      <div class="step-icon">&#128176;</div>
+      <h3>Pay Your Way</h3>
+      <p>Complete checkout via Bank Transfer, Debit Card, USSD code, QR Code, or RushPoint wallet. Funds enter secure escrow instantly via Flutterwave.</p>
+    </div>
+    <div class="step-card">
+      <span class="step-num">STEP 04</span>
+      <div class="step-icon">&#128661;</div>
+      <h3>Rider Delivers, You Confirm</h3>
+      <p>Assigned rider arrives at your location. You hand them your 4-digit delivery PIN to confirm receipt and release escrow funds automatically.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- FEATURES -->
+<div class="features-bg" id="features">
+  <div class="features-inner">
+    <div style="text-align:center; margin-bottom:48px;">
+      <span class="section-eyebrow">Platform Capabilities</span>
+      <h2 class="section-heading">Built for Africa's Modern Commerce</h2>
+    </div>
     <div class="features-grid">
       <div class="feature-card">
-        <div class="feature-icon">🏬</div>
+        <div class="feature-icon-wrap">&#127978;</div>
         <h3>Physical Merchant Stalls</h3>
-        <p>Step directly into verified physical stalls like Almusik Venture and Muhabbik Bread. Browse real live inventory with instant delivery dispatch.</p>
+        <p>Browse verified local stalls like Almusik Venture and Muhabbik Bread. Real live inventory with instant dispatch &mdash; not fake online catalogues.</p>
       </div>
-
       <div class="feature-card">
-        <div class="feature-icon">🔒</div>
-        <h3>4-Way Financial Escrow</h3>
-        <p>Funds are protected in escrow until you verify the physical package and provide your 4-digit Delivery PIN to the courier.</p>
+        <div class="feature-icon-wrap">&#128506;</div>
+        <h3>Road Distance Pricing</h3>
+        <p>Delivery fee is calculated from real OSRM road kilometres between vendor and your GPS. Multi-item orders get transparent surcharges, not hidden fees.</p>
       </div>
-
       <div class="feature-card">
-        <div class="feature-icon">🗺️</div>
-        <h3>Live Road Distance Pricing</h3>
-        <p>No flat extortionate delivery fees. Exact road distance is measured via live OSRM routing per kilometer and per meter.</p>
+        <div class="feature-icon-wrap">&#128274;</div>
+        <h3>4-Way Escrow Protection</h3>
+        <p>Funds are held in escrow until you hand your 4-digit Delivery PIN to the courier. No pay-and-never-receive fraud.</p>
       </div>
-
       <div class="feature-card">
-        <div class="feature-icon">💳</div>
-        <h3>Multi-Channel Flutterwave Payments</h3>
-        <p>Seamless top-ups and payments via Bank Transfer, USSD, Debit Cards, and direct wallet escrow with instant webhook settlements.</p>
+        <div class="feature-icon-wrap">&#128179;</div>
+        <h3>Multi-Channel Payments</h3>
+        <p>Fund wallet or checkout via Flutterwave: Bank Transfer, USSD, Debit Card, QR Code, or wallet escrow. Instant webhook confirmations.</p>
       </div>
-
       <div class="feature-card">
-        <div class="feature-icon">📦</div>
-        <h3>Motor Park & City Waybills</h3>
-        <p>Send and receive independent parcels between transport parks and doorsteps with live tracking and rider proof-of-delivery.</p>
+        <div class="feature-icon-wrap">&#128230;</div>
+        <h3>Waybill &amp; Parcel Dispatch</h3>
+        <p>Send independent parcels door-to-door or park-to-park with live tracking, waybill invoices, and rider proof-of-delivery.</p>
       </div>
-
       <div class="feature-card">
-        <div class="feature-icon">🛡️</div>
-        <h3>OPay-Grade Session Security</h3>
-        <p>30-second auto-lock lifecycle timer, 4-digit quick unlock PIN, Thumbprint biometric auth, and withdrawal authorization codes.</p>
+        <div class="feature-icon-wrap">&#128737;</div>
+        <h3>OPay-Grade Security</h3>
+        <p>30-second auto-lock, 4-digit transaction PIN, fingerprint biometric auth. Your financial operations are protected like a bank app.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">&#127978;</div>
+        <h3>Vendor Dashboard</h3>
+        <p>Merchants manage live inventory, set product prices, and track real-time sales revenue from the vendor dashboard.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">&#127873;</div>
+        <h3>Promo &amp; Discount Engine</h3>
+        <p>Admin assigns weekly promo codes per store or delivery type. Customers apply codes at checkout for real, live discounts.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">&#127974;</div>
+        <h3>Dedicated Virtual Accounts</h3>
+        <p>Every user gets a personal Wema Bank virtual account number for wallet top-ups &mdash; just like a real fintech wallet.</p>
       </div>
     </div>
-  </section>
+  </div>
+</div>
 
-  <!-- Download Direct Banner -->
-  <section class="download-cta" id="download">
-    <h2>Get RushPoint on Android & iOS</h2>
-    <p>Install the native mobile application on your smartphone to order products, dispatch parcels, and manage your merchant store on the go.</p>
-    <div class="hero-actions" style="justify-content: center; margin-bottom: 0;">
+
+<!-- PRICING EXPLAINER -->
+<section class="pricing-section">
+  <div class="pricing-inner">
+    <div class="pricing-text">
+      <span class="section-eyebrow">Transparent Pricing</span>
+      <h2 class="section-heading">How Delivery Fees Are Calculated</h2>
+      <p class="section-sub">
+        RushPoint uses real road distance &mdash; not flat guesswork. The admin sets the per-kilometre rate,
+        and you pay exactly what the road costs.
+      </p>
+      <div class="pricing-rule">
+        <div class="rule-badge">&#128506;</div>
+        <div class="rule-text">
+          <h4>Road Distance Base Fee</h4>
+          <p>OSRM calculates actual driving distance from vendor stall to your GPS location. You pay by the kilometre.</p>
+        </div>
+      </div>
+      <div class="pricing-rule">
+        <div class="rule-badge">&#128230;</div>
+        <div class="rule-text">
+          <h4>Multi-Item Surcharge (+0.2% per item)</h4>
+          <p>If your order has more than 1 item from the same shop, a small 0.2% per-item surcharge is added on top of the base delivery fee.</p>
+        </div>
+      </div>
+      <div class="pricing-rule">
+        <div class="rule-badge">&#128202;</div>
+        <div class="rule-text">
+          <h4>Bulk Order Fee (+4% when qty &gt; 5)</h4>
+          <p>Orders with more than 5 total products add a 4% fee of the base delivery charge to cover increased handling weight.</p>
+        </div>
+      </div>
+      <div class="pricing-rule">
+        <div class="rule-badge">&#128661;</div>
+        <div class="rule-text">
+          <h4>Vehicle Multiplier</h4>
+          <p>Motorcycle = 1.0&times; (standard). Tricycle/Keke for bulky cargo = 1.6&times; (larger vehicle surcharge).</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="pricing-card">
+      <div class="pricing-card-title">&#128203; Sample Delivery Breakdown</div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Road Distance</span>
+        <span class="pricing-row-value">5.2 km via OSRM</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Base Fee (admin-set)</span>
+        <span class="pricing-row-value">&#8358;1,200.00</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Distance Fee (&#8358;120/km &times; 5.2)</span>
+        <span class="pricing-row-value">&#8358;624.00</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Multi-Item Surcharge (3 items &times; 0.2%)</span>
+        <span class="pricing-row-value amber">&#8358;10.94</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Bulk Qty Surcharge (&lt;5 items &mdash; none)</span>
+        <span class="pricing-row-value">&#8358;0.00</span>
+      </div>
+      <div class="pricing-row" style="background:rgba(52,211,153,0.08);border-radius:10px;padding:12px;margin-top:4px;">
+        <span class="pricing-row-label" style="color:#6EE7B7;font-weight:800;">Total Delivery Fee</span>
+        <span class="pricing-row-value emerald">&#8358;1,834.94</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Rider's Commission (80%)</span>
+        <span class="pricing-row-value">&#8358;1,467.95</span>
+      </div>
+      <div class="pricing-row">
+        <span class="pricing-row-label">Platform Service Fee</span>
+        <span class="pricing-row-value">&#8358;150.00</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- DOWNLOAD CTA -->
+<section class="download-section" id="download">
+  <div style="position:relative;z-index:2;">
+    <h2>Get RushPoint on Android &amp; iOS</h2>
+    <p>Install the native mobile app on your smartphone to order products, dispatch parcels, and manage your merchant store on the go.</p>
+    <div class="download-btns">
       <a href="/downloads/rushpoint-app-v1.0-release.apk" class="btn-hero btn-hero-primary">
-        <span>🤖 Download Android APK</span>
+        &#129302; Download Android APK
       </a>
-      <a href="/downloads/rushpoint-app-v1.0-release.ipa" class="btn-hero btn-hero-secondary">
-        <span>🍏 Download iOS IPA</span>
+      <a href="itms-services://?action=download-manifest&url=https://rushpoint2.onrender.com/download/ios-manifest.plist"
+         id="ios-cta-btn" class="btn-hero btn-hero-outline">
+        &#127823; Install on iPhone (iOS)
       </a>
-      <a href="/app" class="btn-hero btn-hero-secondary">
-        <span>🌐 Open Web App Barrier</span>
+      <a href="/download/ios-ipa" class="btn-hero btn-hero-outline">
+        &#8675; Download IPA File
+      </a>
+      <a href="/app" class="btn-hero btn-hero-outline">
+        &#127758; Open Web App
       </a>
     </div>
-  </section>
+    <p class="ios-note">
+      iOS Note: Tap "Install on iPhone" in Safari for a native install prompt.
+      If on a non-Safari browser, use "Download IPA File" and install via AltStore, Sideloadly, or Xcode.
+      Enterprise distribution requires your device UDID to be registered with RushPoint.
+    </p>
+  </div>
+</section>
 
-  <!-- Footer -->
-  <footer>
-    <div class="footer-container">
-      <div class="footer-brand">
-        <h4>RushPoint Logistics</h4>
-        <p style="font-size: 0.85rem; max-width: 360px;">Nigeria's smart marketplace, courier dispatch, and multi-channel financial escrow platform.</p>
-      </div>
-      <div class="footer-links">
-        <h5>Quick Links</h5>
-        <ul>
-          <li><a href="/app">Mobile App Portal</a></li>
-          <li><a href="#calculator">Live Pricing Calculator</a></li>
-          <li><a href="/invite-signup.html">Partner Onboarding</a></li>
-        </ul>
-      </div>
-      <div class="footer-links">
-        <h5>Downloads</h5>
-        <ul>
-          <li><a href="/downloads/rushpoint-app-v1.0-release.apk">Android Release APK</a></li>
-          <li><a href="/downloads/rushpoint-app-v1.0-release.ipa">Apple iOS IPA</a></li>
-          <li><a href="/downloads/rushpoint-flutter-full-source.zip">Flutter Source Archive</a></li>
-        </ul>
-      </div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div>
+      <a href="/" class="footer-brand-logo-wrap">
+        <img src="/static/img/rushpoint-logo.png" alt="RushPoint" class="footer-logo-img"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="footer-logo-fb" style="display:none">RP</div>
+        <span class="footer-brand-name">RushPoint Logistics</span>
+      </a>
+      <p class="footer-desc">
+        Nigeria's smart marketplace, on-demand courier dispatch, and multi-channel financial escrow platform.
+        Built for the modern African merchant, courier, and customer.
+      </p>
     </div>
-    <div class="footer-bottom">
-      <span>© 2026 RushPoint Technologies. All rights reserved.</span>
-      <span>256-Bit SSL Encrypted • PCI-DSS Certified Gateway</span>
+    <div class="footer-col">
+      <h5>Platform</h5>
+      <ul>
+        <li><a href="/app">Mobile Web App</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#calculator">Live Pricing</a></li>
+      </ul>
     </div>
-  </footer>
+    <div class="footer-col">
+      <h5>Partners</h5>
+      <ul>
+        <li><a href="/invite-signup.html">Become a Vendor</a></li>
+        <li><a href="/invite-signup.html">Become a Rider</a></li>
+        <li><a href="/invite-signup.html">Partner Onboarding</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Downloads</h5>
+      <ul>
+        <li><a href="/downloads/rushpoint-app-v1.0-release.apk">Android APK</a></li>
+        <li><a href="itms-services://?action=download-manifest&url=https://rushpoint2.onrender.com/download/ios-manifest.plist">iOS App (Safari)</a></li>
+        <li><a href="/download/ios-ipa">iOS IPA File</a></li>
+        <li><a href="/downloads/rushpoint-flutter-full-source.zip">Flutter Source Code</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&copy; 2026 RushPoint Technologies Ltd. All rights reserved.</span>
+    <div class="footer-badges">
+      <span class="footer-badge">&#128274; 256-Bit SSL</span>
+      <span class="footer-badge">&#128179; Flutterwave Certified</span>
+      <span class="footer-badge">&#128506; OSRM Routing</span>
+    </div>
+  </div>
+</footer>
 
-  <script>
-    function calculateLiveQuote() {
-      const pickupVal = document.getElementById('calc-pickup').value;
-      const destVal = document.getElementById('calc-dest').value;
-      const vehicleVal = document.getElementById('calc-vehicle').value;
-
-      const [pCoords, pName] = pickupVal.split('|');
-      const [dCoords, dName] = destVal.split('|');
-      const [vType, vMult] = vehicleVal.split('|');
-
-      const mult = parseFloat(vMult) || 1.0;
-      let baseKm = 4.2;
-      if (destVal.includes('5.2')) baseKm = 5.2;
-      if (destVal.includes('2.1')) baseKm = 2.1;
-      if (destVal.includes('8.4')) baseKm = 8.4;
-
-      const fee = Math.round((1200 + (baseKm * 120)) * mult);
-      const minutes = Math.round(baseKm * 3.2);
-
-      document.getElementById('calc-fee-display').textContent = '₦' + fee.toLocaleString() + '.00';
-      document.getElementById('calc-time-display').textContent = '~' + minutes + ' mins';
+<script>
+  function toggleMobileNav() {
+    document.getElementById('mobileNav').classList.toggle('open');
+  }
+  document.addEventListener('click', function(e) {
+    var nav = document.getElementById('mobileNav');
+    var btn = document.querySelector('.mobile-menu-btn');
+    if (nav.classList.contains('open') && !nav.contains(e.target) && !btn.contains(e.target)) {
+      nav.classList.remove('open');
     }
-    // Initialize quote
-    calculateLiveQuote();
-  </script>
+  });
+
+  function calculateLiveQuote() {
+    var destVal = document.getElementById('calc-dest').value;
+    var vMult = parseFloat(document.getElementById('calc-vehicle').value) || 1.0;
+    var parts = destVal.split(',');
+    var km = parseFloat(parts[2]) || 5.2;
+    var pricePerKm = 120; // Admin-configurable
+    var baseFee = 1200;
+    var distanceFee = km * pricePerKm;
+    var totalFee = (baseFee + distanceFee) * vMult;
+    var mins = Math.round((km / 35) * 60) + 5;
+    document.getElementById('calc-fee-display').textContent = '\u20a6' + totalFee.toLocaleString('en-NG', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('calc-time-display').textContent = '~' + mins + ' mins';
+    document.getElementById('calc-km-display').textContent = km.toFixed(1) + ' km road route' + (vMult > 1 ? ' (Tricycle)' : '');
+  }
+
+  // On non-iOS devices, change iOS buttons to direct IPA download
+  (function() {
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (!isIOS) {
+      ['ios-hero-btn', 'ios-cta-btn'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.href = '/download/ios-ipa';
+      });
+    }
+  })();
+
+  calculateLiveQuote();
+</script>
 </body>
 </html>

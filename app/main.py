@@ -131,6 +131,11 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# Mount Downloads Directory at /downloads (APK, IPA, ZIPs)
+downloads_dir = os.path.join(static_dir, "downloads")
+os.makedirs(downloads_dir, exist_ok=True)
+app.mount("/downloads", StaticFiles(directory=downloads_dir), name="downloads")
+
 @app.on_event("startup")
 def startup_event():
     init_db()
@@ -186,6 +191,80 @@ def download_mobile_package():
     if os.path.exists(zip_path):
         return FileResponse(zip_path, media_type="application/zip", filename="rushingpoint-mobile-v1.0.zip")
     return {"error": "Mobile package not found"}
+
+@app.get("/download/ios-ipa")
+@app.get("/download/rushpoint.ipa")
+def download_ios_ipa():
+    """
+    Serve the iOS IPA file with correct Content-Type for direct download.
+    iOS users should use the OTA manifest install instead (itms-services:// link).
+    """
+    # Check static downloads dir first (preferred for Render deployment)
+    ipa_path = os.path.join(static_dir, "downloads", "rushpoint-app-v1.0-release.ipa")
+    if not os.path.exists(ipa_path):
+        ipa_path = os.path.join(static_dir, "downloads", "rushpoint-release.ipa")
+    if not os.path.exists(ipa_path):
+        ipa_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mobile-release", "rushpoint-app-v1.0-release.ipa")
+    if os.path.exists(ipa_path):
+        return FileResponse(
+            ipa_path,
+            media_type="application/octet-stream",
+            filename="rushpoint-v1.0.ipa",
+            headers={
+                "Content-Disposition": "attachment; filename=rushpoint-v1.0.ipa",
+                "X-Content-Type-Options": "nosniff",
+            }
+        )
+    return {"error": "IPA file not found. Please use AltStore or Xcode to install."}
+
+@app.get("/download/ios-manifest.plist")
+def download_ios_manifest(request: Request):
+    """
+    iOS OTA Install Manifest (itms-services://?action=download-manifest&url=...)
+    Enables 'Install' prompt directly on iOS Safari for enterprise/sideload distribution.
+    """
+    base_url = str(request.base_url).rstrip("/")
+    ipa_url = f"{base_url}/download/ios-ipa"
+    plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>items</key>
+    <array>
+        <dict>
+            <key>assets</key>
+            <array>
+                <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>{ipa_url}</string>
+                </dict>
+            </array>
+            <key>metadata</key>
+            <dict>
+                <key>bundle-identifier</key>
+                <string>com.rushingpoint.rushpoint</string>
+                <key>bundle-version</key>
+                <string>1.0.0</string>
+                <key>kind</key>
+                <string>software</string>
+                <key>title</key>
+                <string>RushPoint Logistics</string>
+                <key>subtitle</key>
+                <string>Smart Marketplace &amp; Courier Dispatch</string>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>"""
+    from fastapi.responses import Response as FastAPIResponse
+    return FastAPIResponse(
+        content=plist_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=rushpoint-manifest.plist"}
+    )
 
 @app.post("/webhooks/flutterwave")
 async def root_flutterwave_webhook(request: Request):

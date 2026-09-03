@@ -63,68 +63,139 @@ def get_store_marketplace_details(store_id: str):
         "products": [dict(p) for p in products]
     }
 
-def calculate_intelligent_delivery_fee(items_data: list, base_delivery_fee: float = 1200.0, custom_store_fee: float = None) -> dict:
+def calculate_intelligent_delivery_fee(
+    items_data: list,
+    base_delivery_fee: float = 1200.0,
+    custom_store_fee: float = None,
+    origin_lat: float = None,
+    origin_lon: float = None,
+    dest_lat: float = None,
+    dest_lon: float = None,
+) -> dict:
     """
-    Internal Free AI Rule-Based Cargo & Weight Delivery Engine:
-    - Same-Vendor Multi-Item Rule: Buying multiple minor items or multiple bags of standard goods (e.g., 5 bags of sugar, rice, groceries) from the same shop = FLAT single delivery fee (₦0 extra delivery increment).
-    - Heavy / Bulky Goods (cement, blocks, steel, iron, sandcrete, generators, heavy machinery):
-      -> Base Heavy Surcharge +₦1,500 + ₦500/additional heavy item.
-      -> Automatic vehicle requirement: TRICYCLE (Cargo Keke) / Van.
-    - Custom Store Fee: If admin configured a custom delivery fee for a specific vendor stall, it overrides global base fee.
+    Distance-Based Multi-Item Delivery Fee Engine:
+    
+    BASE RULE:
+    - Delivery fee is calculated from REAL road distance between vendor stall and customer GPS location.
+    - Admin configures the per-km rate via system_settings (key: 'price_per_metre').
+    - If origin/dest coordinates not available, falls back to cargo/weight-based flat fee.
+
+    MULTI-ITEM SURCHARGES (same store order):
+    - +0.2% per item (per total item in cart) on top of base distance fee.
+    - If product count (total qty) > 5: an additional +4% of delivery fee for all items combined.
+
+    CARGO OVERRIDES:
+    - Heavy / Bulky goods (cement, blocks, steel, generators): +₦1,500 + ₦500/extra heavy item.
+      Requires TRICYCLE vehicle (1.6x multiplier applied by routing_service).
+    - Very high-volume bulk (> 15 total items): +₦800 + TRICYCLE.
+    - Custom Store Fee: If admin set a custom delivery fee for a stall, it overrides global base.
     """
     effective_base_fee = float(custom_store_fee) if custom_store_fee is not None and custom_store_fee > 0 else base_delivery_fee
     total_qty = sum(it.get("quantity", 1) for it in items_data)
+    total_product_lines = len(items_data)
     heavy_count = 0
     standard_count = 0
-    
-    heavy_keywords = ["cement", "block", "blocks", "steel", "rod", "iron", "sandcrete", "hectare", "land", "ton", "tonne", "generator", "machinery", "heavy machinery", "concrete"]
-    
+
+    heavy_keywords = ["cement", "block", "blocks", "steel", "rod", "iron", "sandcrete",
+                      "hectare", "land", "ton", "tonne", "generator", "machinery", "heavy machinery", "concrete"]
+
     for it in items_data:
         name_lower = (it.get("name") or it.get("product_name") or "").lower()
         desc_lower = (it.get("description") or "").lower()
         cat_id = (it.get("category_id") or "").lower()
         qty = it.get("quantity", 1)
-        
         is_heavy = cat_id in ["cat-build", "cat-land"] or any(k in name_lower or k in desc_lower for k in heavy_keywords)
-        
         if is_heavy:
             heavy_count += qty
         else:
             standard_count += qty
-            
+
     heavy_surcharge = 0.0
     recommended_vehicle = "MOTORCYCLE"
     cargo_class = "STANDARD"
-    
+    routing_info = None
+
     if heavy_count > 0:
         cargo_class = "HEAVY_BULKY"
-        recommended_vehicle = "TRICYCLE" # Requires Keke Cargo / Tricycle Van
+        recommended_vehicle = "TRICYCLE"
         heavy_surcharge = 1500.0 + (max(0, heavy_count - 1) * 500.0)
     elif standard_count > 15:
-        # Huge bulk quantity requires tricycle for physical capacity
         cargo_class = "HIGH_VOLUME_BULK"
         recommended_vehicle = "TRICYCLE"
         heavy_surcharge = 800.0
     else:
-        # Standard multiple items/bags from same vendor (e.g. 5 bags of sugar, groceries) have 0% delivery increment!
         cargo_class = "SAME_VENDOR_COMBINED"
         recommended_vehicle = "MOTORCYCLE"
         heavy_surcharge = 0.0
 
-    total_delivery_fee = effective_base_fee + heavy_surcharge
-    
-    return {
-        "base_delivery_fee": effective_base_fee,
+    # --- DISTANCE-BASED PRICING (primary engine) ---
+    distance_km = 0.0
+    distance_fee = 0.0
+    engine_used = "FLAT_BASE_FEE"
+
+    if origin_lat is not None and origin_lon is not None and dest_lat is not None and dest_lon is not None:
+        try:
+            routing_info = calculate_road_distance_and_fee(
+                origin_lat=origin_lat,
+                origin_lon=origin_lon,
+                dest_lat=dest_lat,
+                dest_lon=dest_lon,
+                cargo_weight_kg=max(1.0, total_qty * 0.5),
+                vehicle_type=recommended_vehicle,
+            )
+            # Use the fully calculated fee from routing (includes base + distance + weight + vehicle multiplier)
+            distance_based_fee = routing_info["pricing"]["total_delivery_fee"]
+            distance_km = routing_info["distance_km"]
+            engine_used = routing_info["engine"]
+            # If custom store fee override is set, respect it as minimum
+            effective_distance_fee = max(distance_based_fee, effective_base_fee if custom_store_fee else 0)
+            effective_base_fee = effective_distance_fee
+        except Exception:
+            pass  # Fall through to flat fee below
+
+    total_before_surcharges = effective_base_fee + heavy_surcharge
+
+    # --- MULTI-ITEM SURCHARGES ---
+    # Rule 1: +0.2% per item in cart on top of base fee
+    per_item_pct_surcharge = 0.0
+    if total_qty > 1:
+        per_item_pct_surcharge = total_before_surcharges * (total_qty * 0.002)  # 0.2% per item
+
+    # Rule 2: If products > 5 total quantity: +4% of one product's base delivery fee for all
+    bulk_surcharge = 0.0
+    if total_qty > 5:
+        bulk_surcharge = total_before_surcharges * 0.04  # 4% additional for bulk orders
+
+    total_delivery_fee = round(total_before_surcharges + per_item_pct_surcharge + bulk_surcharge, 2)
+
+    result = {
+        "base_delivery_fee": round(effective_base_fee, 2),
         "is_custom_vendor_fee": custom_store_fee is not None and custom_store_fee > 0,
-        "heavy_surcharge": heavy_surcharge,
+        "heavy_surcharge": round(heavy_surcharge, 2),
         "same_vendor_discount_applied": standard_count > 1 and heavy_count == 0,
-        "total_delivery_fee": round(total_delivery_fee, 2),
+        "total_delivery_fee": total_delivery_fee,
         "recommended_vehicle": recommended_vehicle,
         "cargo_class": cargo_class,
         "heavy_count": heavy_count,
         "standard_count": standard_count,
-        "total_quantity": total_qty
+        "total_quantity": total_qty,
+        "total_product_lines": total_product_lines,
+        "distance_km": round(distance_km, 2),
+        "pricing_engine": engine_used,
+        "per_item_pct_surcharge": round(per_item_pct_surcharge, 2),
+        "bulk_qty_surcharge": round(bulk_surcharge, 2),
+        "multi_item_rule_applied": total_qty > 1,
+        "bulk_5plus_rule_applied": total_qty > 5,
     }
+    if routing_info:
+        result["routing_detail"] = {
+            "distance_metres": routing_info["distance_metres"],
+            "distance_km": routing_info["distance_km"],
+            "estimated_duration_minutes": routing_info["estimated_duration_minutes"],
+            "origin_location_name": routing_info["origin_location_name"],
+            "destination_location_name": routing_info["destination_location_name"],
+        }
+    return result
 
 @router.post("/recalculate-cart")
 @router.post("/cart/recalculate")
@@ -167,19 +238,35 @@ def recalculate_cart(payload: dict):
     # Base delivery fee from system settings or default
     base_fee_row = conn.execute("SELECT value FROM system_settings WHERE key = 'base_delivery_fee'").fetchone()
     base_delivery_fee = float(base_fee_row["value"]) if base_fee_row else 1200.0
-    
-    # Check custom store delivery fee
+
+    # Check custom store delivery fee + get store GPS location
     custom_store_fee = None
+    store_lat, store_lon = None, None
     if store_id:
-        st_row = conn.execute("SELECT custom_delivery_fee FROM stores WHERE id = ?", (store_id,)).fetchone()
-        if st_row and st_row["custom_delivery_fee"]:
-            custom_store_fee = float(st_row["custom_delivery_fee"])
-            
-    delivery_info = calculate_intelligent_delivery_fee(validated_items, base_delivery_fee, custom_store_fee)
+        st_row = conn.execute("SELECT custom_delivery_fee, latitude, longitude FROM stores WHERE id = ?", (store_id,)).fetchone()
+        if st_row:
+            if st_row["custom_delivery_fee"]:
+                custom_store_fee = float(st_row["custom_delivery_fee"])
+            store_lat = st_row["latitude"] if st_row["latitude"] else None
+            store_lon = st_row["longitude"] if st_row["longitude"] else None
+
+    # Customer GPS from payload (sent by mobile app at checkout)
+    cust_lat = payload.get("customer_lat") or payload.get("delivery_lat")
+    cust_lon = payload.get("customer_lng") or payload.get("delivery_lng") or payload.get("customer_lon")
+
+    delivery_info = calculate_intelligent_delivery_fee(
+        validated_items,
+        base_delivery_fee,
+        custom_store_fee,
+        origin_lat=store_lat,
+        origin_lon=store_lon,
+        dest_lat=float(cust_lat) if cust_lat else None,
+        dest_lon=float(cust_lon) if cust_lon else None,
+    )
     delivery_fee = delivery_info["total_delivery_fee"]
     platform_fee = 150.0
     total_amount = subtotal + delivery_fee + platform_fee
-    
+
     conn.close()
     return {
         "subtotal": round(subtotal, 2),
@@ -242,7 +329,24 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
     base_fee_row = conn.execute("SELECT value FROM system_settings WHERE key = 'base_delivery_fee'").fetchone()
     base_delivery_fee = float(base_fee_row["value"]) if base_fee_row else 1200.0
     custom_store_fee = float(store["custom_delivery_fee"]) if store.get("custom_delivery_fee") else None
-    delivery_calc = calculate_intelligent_delivery_fee(raw_items_for_calc, base_delivery_fee, custom_store_fee)
+
+    # Store GPS location (origin of delivery)
+    store_lat = store.get("latitude") or None
+    store_lon = store.get("longitude") or None
+
+    # Customer GPS (destination of delivery) - from checkout request
+    cust_lat = req.delivery_lat if req.delivery_lat and req.delivery_lat != 6.5244 else None
+    cust_lon = req.delivery_lng if req.delivery_lng and req.delivery_lng != 3.3792 else None
+
+    delivery_calc = calculate_intelligent_delivery_fee(
+        raw_items_for_calc,
+        base_delivery_fee,
+        custom_store_fee,
+        origin_lat=store_lat,
+        origin_lon=store_lon,
+        dest_lat=cust_lat,
+        dest_lon=cust_lon,
+    )
     delivery_fee = delivery_calc["total_delivery_fee"]
     platform_fee = 150.0
     total_amount = subtotal + delivery_fee + platform_fee
