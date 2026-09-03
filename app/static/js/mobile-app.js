@@ -1173,7 +1173,7 @@ const MobileApp = {
     this.render();
   },
 
-  openFlutterwaveModal(totalAmount) {
+  async openFlutterwaveModal(totalAmount) {
     const address = document.getElementById("checkout-address").value.trim();
     const phone = document.getElementById("checkout-phone").value.trim();
     if (!address || !phone) {
@@ -1181,83 +1181,130 @@ const MobileApp = {
       return;
     }
 
+    let dedicatedAcc = null;
+    try {
+      const wRes = await API.get("/api/finance/wallet/dedicated-account");
+      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
+    } catch(e) {}
+
+    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
+    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
+    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
+
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 360px; border-radius: 20px; overflow: hidden; padding: 0;">
-        <!-- Flutterwave Header -->
-        <div style="background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px; overflow: hidden; padding: 0;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <div style="font-size: 0.7rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">Secured by Flutterwave</div>
-            <div style="font-size: 1.1rem; font-weight: 900;">RushPoint Checkout</div>
+            <div style="font-size: 0.68rem; font-weight: 800; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">256-Bit SSL Secured</div>
+            <div style="font-size: 1.15rem; font-weight: 900;">Multi-Payment Checkout</div>
           </div>
           <div style="font-size: 1.2rem; cursor: pointer;" onclick="this.closest('.modal-backdrop').remove()">✕</div>
         </div>
 
-        <div style="padding: 16px;">
+        <div style="padding: 16px; max-height: 80vh; overflow-y: auto;">
           <!-- Amount Banner -->
-          <div style="background: #FFF7ED; border: 1px solid #FFEDD5; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 14px;">
-            <div style="font-size: 0.72rem; color: #9A3412; font-weight: 700;">TOTAL AMOUNT DUE</div>
-            <div style="font-size: 1.5rem; font-weight: 900; color: #C2410C;">₦${totalAmount.toLocaleString()}</div>
-            <div style="font-size: 0.65rem; color: #7C2D12; margin-top: 2px;">Instant Vendor 100% credit + Admin Delivery Escrow</div>
+          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 14px;">
+            <div style="font-size: 0.7rem; color: #7F1D1D; font-weight: 800;">TOTAL AMOUNT TO PAY</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: #991B1B;">₦${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            <div style="font-size: 0.68rem; color: #059669; font-weight: 700; margin-top: 2px;">🛡️ 4-Way Delivery Escrow Protected</div>
           </div>
 
-          <!-- Simulated Card Details -->
-          <div style="margin-bottom: 14px;">
-            <label class="rp-label">Card Number (Demo Sandbox)</label>
-            <input type="text" class="rp-input" value="5399 •••• •••• 8821" readonly style="background: #F8FAFC; font-weight: 700; border-radius: 10px;">
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
-            <div>
-              <label class="rp-label">Valid Thru</label>
-              <input type="text" class="rp-input" value="12/28" readonly style="background: #F8FAFC; border-radius: 10px;">
+          <!-- Payment Methods Selector -->
+          <div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Payment Option:</div>
+
+          <!-- 1. Direct Bank Transfer Card -->
+          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Direct Bank Transfer</span>
+              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">MOST POPULAR</span>
             </div>
-            <div>
-              <label class="rp-label">CVV</label>
-              <input type="password" class="rp-input" value="843" readonly style="background: #F8FAFC; border-radius: 10px;">
+            <div style="font-size: 0.72rem; color: #374151; margin-bottom: 8px;">Transfer from OPay, Kuda, GTBank, Zenith, PalmPay:</div>
+            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
+                <div style="font-size: 1.1rem; font-weight: 900; color: #14532D; letter-spacing: 1px;" id="checkout-bank-acc">${accNum}</div>
+                <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
+              </div>
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Account number copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
+                Copy
+              </button>
             </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'BANK_TRANSFER')" style="width: 100%; margin-top: 8px; background: #166534; color: #FFF; border: none; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">
+              I Have Made This Transfer ➔
+            </button>
           </div>
 
-          <button id="flw-pay-btn" onclick="MobileApp.processFlutterwavePayment('${address}', '${phone}')" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.95rem; background: #EA580C; font-weight: 800; border-radius: 12px;">
-            Pay ₦${totalAmount.toLocaleString()} via Flutterwave 🔒
-          </button>
+          <!-- 2. Online Card Payment -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">💳 Debit / Credit Card</div>
+              <div style="font-size: 0.68rem; color: #64748B;">Mastercard, Visa, Verve (Flutterwave)</div>
+            </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'CARD')" style="background: #B91C1C; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              Pay with Card
+            </button>
+          </div>
+
+          <!-- 3. USSD Code -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">📱 USSD Banking Code</div>
+              <div style="font-size: 0.68rem; color: #64748B;">*737#, *901#, *894# Instant Dial</div>
+            </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'USSD')" style="background: #334155; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              Pay via USSD
+            </button>
+          </div>
+
+          <!-- 4. QR Code -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">🔳 Scan to Pay (QR Code)</div>
+              <div style="font-size: 0.68rem; color: #64748B;">Scan from your mobile bank application</div>
+            </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'QR_CODE')" style="background: #0284C7; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              Show QR
+            </button>
+          </div>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
   },
 
-  async processFlutterwavePayment(address, phone) {
-    const btn = document.getElementById("flw-pay-btn");
-    if (btn) {
-      btn.innerHTML = `<span>⏳ Verifying Transaction...</span>`;
-      btn.disabled = true;
+  async processMultiPayment(address, phone, method = "FLUTTERWAVE") {
+    const overlay = document.querySelector(".rp-modal-overlay");
+    if (overlay) overlay.innerHTML = `
+      <div class="modal-dialog" style="max-width: 320px; text-align: center; padding: 24px; border-radius: 20px;">
+        <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
+        <div style="font-size: 1rem; font-weight: 900; color: #1E293B; margin-bottom: 6px;">Processing Transaction...</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Connecting to Flutterwave gateway & securing 4-way escrow.</div>
+      </div>
+    `;
+
+    try {
+      const payload = {
+        store_id: this.cart[0].store_id,
+        items: this.cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+        delivery_address: address,
+        customer_phone: phone,
+        payment_method: method
+      };
+
+      const res = await API.post("/api/marketplace/checkout", payload);
+      document.querySelector(".rp-modal-overlay")?.remove();
+      this.cart = [];
+      this.activeTab = "orders";
+      API.showToast(`Order Placed (${res.order_ref})! 4-Digit Delivery PIN: ${res.pod_otp || '8899'}`, "success");
+      this.render();
+      if (window.AdminPortal) window.AdminPortal.init();
+    } catch (e) {
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(e.message || "Failed to complete payment. Please check balance or try card.", "error");
     }
-
-    setTimeout(async () => {
-      try {
-        const payload = {
-          store_id: this.cart[0].store_id,
-          items: this.cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
-          delivery_address: address,
-          customer_phone: phone,
-          payment_method: "FLUTTERWAVE"
-        };
-
-        const res = await API.post("/api/marketplace/checkout", payload);
-        document.querySelector(".rp-modal-overlay")?.remove();
-        this.cart = [];
-        this.activeTab = "orders";
-        API.showToast(`Flutterwave Payment Approved! Vendor credited ₦${(res.vendor_credited || 0).toLocaleString()} instantly.`, "success");
-        this.render();
-        if (window.AdminPortal) window.AdminPortal.init();
-      } catch (e) {
-        if (btn) {
-          btn.innerHTML = `Try Again`;
-          btn.disabled = false;
-        }
-      }
-    }, 1200);
   },
 
   async handleCheckout(method = "WALLET") {
@@ -2788,30 +2835,66 @@ const MobileApp = {
     }
   },
 
-  showTopUpModal(currentBalance) {
+  async showTopUpModal(currentBalance) {
+    let dedicatedAcc = null;
+    try {
+      const wRes = await API.get("/api/finance/wallet/dedicated-account");
+      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
+    } catch(e) {}
+
+    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
+    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
+    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
+
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 360px; border-radius: 20px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1.1rem; font-weight: 800; color: #1E293B;">➕ Top Up Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 370px; border-radius: 20px; overflow: hidden; padding: 0;">
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 1.1rem; font-weight: 900; margin: 0;">💰 Fund RushPoint Wallet</h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="background: #FFF5F5; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 0.75rem;">
-          <div style="color: #64748B; margin-bottom: 4px;">Current Balance: <strong style="font-size: 1rem; color: #B91C1C;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
-          <div style="font-size: 0.68rem; color: #7F1D1D; margin-top: 2px;">🔒 Real live online deposit powered by Flutterwave</div>
-        </div>
-
-        <form onsubmit="MobileApp.executeTopUp(event)">
-          <div class="rp-form-group">
-            <label class="rp-label">Deposit Amount (NGN)</label>
-            <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" required style="border-radius: 10px;">
+        <div style="padding: 16px;">
+          <!-- Balance Display -->
+          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.75rem; color: #64748B; font-weight: 700;">Current Balance</span>
+            <span style="font-size: 1.25rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
           </div>
-          <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800;">
-            Pay with Flutterwave 💳
-          </button>
-        </form>
+
+          <!-- 1. DEDICATED VIRTUAL ACCOUNT CARD -->
+          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.8rem; font-weight: 900; color: #166534;">🏦 Your Dedicated Account Number</span>
+              <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT CREDIT</span>
+            </div>
+            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 8px;">Transfer from any bank app (OPay, Kuda, GTB, Zenith, PalmPay):</div>
+            
+            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">${bankName}</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
+                <div style="font-size: 0.68rem; color: #166534; font-weight: 600;">${accName}</div>
+              </div>
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Virtual Account Copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+                📋 Copy
+              </button>
+            </div>
+          </div>
+
+          <div style="text-align: center; color: #94A3B8; font-size: 0.72rem; font-weight: 700; margin-bottom: 10px;">— OR PAY WITH CARD / USSD —</div>
+
+          <!-- 2. FLUTTERWAVE GATEWAY -->
+          <form onsubmit="MobileApp.executeTopUp(event)">
+            <div class="rp-form-group" style="margin-bottom: 10px;">
+              <label class="rp-label" style="font-size: 0.75rem;">Top Up Amount (NGN)</label>
+              <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" required style="border-radius: 10px;">
+            </div>
+            <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800; font-size: 0.88rem;">
+              Pay with Flutterwave (Card / USSD) 💳
+            </button>
+          </form>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);

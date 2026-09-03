@@ -22,21 +22,36 @@ def calculate_logistics_quote(req: LogisticsQuoteRequest):
     }
     multiplier = multipliers.get(req.package_size.upper(), 1.2)
     
-    # Distance estimation demo (approx 8.5 km across city)
-    estimated_distance_km = 8.5
-    base_fare = 1500.0
-    per_km_rate = 120.0
+    # Real OSRM Road Distance Calculation
+    from app.services.routing_service import geocode_address, calculate_road_distance_and_fee
+    p_loc = geocode_address(req.pickup_address or "Katsina Central Commercial Market")
+    d_loc = geocode_address(req.dropoff_address or "Katsina City Gate")
     
-    estimated_total = round((base_fare + (estimated_distance_km * per_km_rate)) * multiplier, 2)
+    route_calc = calculate_road_distance_and_fee(
+        origin_lat=p_loc["latitude"],
+        origin_lon=p_loc["longitude"],
+        dest_lat=d_loc["latitude"],
+        dest_lon=d_loc["longitude"],
+        cargo_weight_kg=2.0 if req.package_size == "SMALL" else (10.0 if req.package_size == "MEDIUM" else 25.0),
+        vehicle_type="TRICYCLE" if req.package_size in ["LARGE", "HEAVY"] else "MOTORCYCLE"
+    )
+    
+    estimated_distance_km = route_calc["distance_km"]
+    base_fare = route_calc["pricing"]["base_fee"]
+    per_km_rate = route_calc["pricing"]["per_km_rate"]
+    estimated_total = round(route_calc["pricing"]["total_delivery_fee"] * multiplier, 2)
     
     return {
-        "pickup_address": req.pickup_address,
-        "dropoff_address": req.dropoff_address,
+        "pickup_address": p_loc["formatted_address"],
+        "dropoff_address": d_loc["formatted_address"],
         "package_size": req.package_size,
         "estimated_distance_km": estimated_distance_km,
+        "distance_metres": route_calc["distance_metres"],
         "base_fare": base_fare,
+        "per_km_rate": per_km_rate,
         "estimated_price": estimated_total,
-        "estimated_time_mins": 35
+        "estimated_time_mins": route_calc["estimated_duration_minutes"],
+        "routing_engine": route_calc["engine"]
     }
 
 @router.post("/book")
@@ -46,8 +61,21 @@ def book_independent_logistics(req: LogisticsQuoteRequest, current_user: dict = 
     """
     multipliers = {"SMALL": 1.0, "MEDIUM": 1.3, "LARGE": 1.8, "HEAVY": 2.5}
     multiplier = multipliers.get(req.package_size.upper(), 1.2)
-    estimated_distance_km = 8.5
-    estimated_total = round((1500.0 + (estimated_distance_km * 120.0)) * multiplier, 2)
+    
+    from app.services.routing_service import geocode_address, calculate_road_distance_and_fee
+    p_loc = geocode_address(req.pickup_address or "Katsina Central Commercial Market")
+    d_loc = geocode_address(req.dropoff_address or "Katsina City Gate")
+    
+    route_calc = calculate_road_distance_and_fee(
+        origin_lat=p_loc["latitude"],
+        origin_lon=p_loc["longitude"],
+        dest_lat=d_loc["latitude"],
+        dest_lon=d_loc["longitude"],
+        cargo_weight_kg=2.0 if req.package_size == "SMALL" else (10.0 if req.package_size == "MEDIUM" else 25.0),
+        vehicle_type="TRICYCLE" if req.package_size in ["LARGE", "HEAVY"] else "MOTORCYCLE"
+    )
+    estimated_distance_km = route_calc["distance_km"]
+    estimated_total = round(route_calc["pricing"]["total_delivery_fee"] * multiplier, 2)
     
     conn = get_db_connection()
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()

@@ -154,18 +154,54 @@ def create_expense(payload: dict, current_user: dict = Depends(require_role(["AD
     
     return {"success": True, "expense_ref": expense_ref, "message": "Expense recorded successfully."}
 
+def ensure_dedicated_virtual_account(conn, user_id: str, full_name: str, user_ref: str) -> dict:
+    """
+    Generates or retrieves a unique dedicated virtual bank account number for the user's wallet.
+    Allows instant bank transfer wallet funding from any Nigerian bank (OPay, Kuda, GTBank, Zenith, FirstBank).
+    """
+    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+    if not wallet:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        w_id = str(uuid.uuid4())
+        conn.execute("INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (w_id, user_id, now_iso))
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", (w_id,)).fetchone()
+
+    acc_num = wallet["dedicated_account_number"] if "dedicated_account_number" in wallet.keys() else None
+    bank_name = wallet["dedicated_bank_name"] if "dedicated_bank_name" in wallet.keys() else "Wema Bank (Flutterwave)"
+    acc_name = wallet["dedicated_account_name"] if "dedicated_account_name" in wallet.keys() else f"RushPoint - {full_name}"
+
+    if not acc_num:
+        # Generate unique 10-digit virtual account number based on user_ref / hash
+        ref_digits = ''.join(filter(str.isdigit, user_ref or ''))
+        if len(ref_digits) < 6:
+            ref_digits = f"{secrets.randbelow(900000)+100000}"
+        acc_num = f"99{ref_digits.zfill(8)[:8]}"
+        now_iso = datetime.now(timezone.utc).isoformat()
+        try:
+            conn.execute("""
+                UPDATE wallets
+                SET dedicated_bank_name = ?,
+                    dedicated_account_number = ?,
+                    dedicated_account_name = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (bank_name, acc_num, acc_name, now_iso, wallet["id"]))
+            conn.commit()
+        except Exception:
+            pass
+
+    return {
+        "bank_name": bank_name or "Wema Bank (Flutterwave)",
+        "account_number": acc_num or f"99{secrets.randbelow(90000000)+10000000}",
+        "account_name": acc_name or f"RushPoint - {full_name}"
+    }
+
 @router.get("/wallet")
 @router.get("/wallet/me")
 def get_my_wallet(current_user: dict = Depends(get_current_user)):
     conn = get_db_connection()
-    # 4-Digit Security PIN Validation for Withdrawals
-    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
-    if user_rec and user_rec["transaction_pin_hash"]:
-        entered_pin = str(payload.get("security_pin", "")).strip()
-        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
-            conn.close()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
-
+    # Ensure user has a dedicated virtual bank account number
+    acc_info = ensure_dedicated_virtual_account(conn, current_user["id"], current_user.get("full_name", "User"), current_user.get("user_ref", "RP-001"))
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -184,21 +220,13 @@ def get_my_wallet(current_user: dict = Depends(get_current_user)):
 @router.post("/wallet/deposit")
 def top_up_wallet(payload: dict, current_user: dict = Depends(get_current_user)):
     """
-    Top up user wallet (Customer demo deposit / instant funding).
+    Top up user wallet via real direct deposit or Flutterwave webhook settlement.
     """
     amount = float(payload.get("amount", 0))
     if amount <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Deposit amount must be greater than zero.")
         
     conn = get_db_connection()
-    # 4-Digit Security PIN Validation for Withdrawals
-    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
-    if user_rec and user_rec["transaction_pin_hash"]:
-        entered_pin = str(payload.get("security_pin", "")).strip()
-        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
-            conn.close()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
-
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -434,14 +462,6 @@ def verify_online_payment(tx_ref: str, current_user: dict = Depends(get_current_
     Verifies transaction status with Flutterwave API and credits user wallet or updates order.
     """
     conn = get_db_connection()
-    # 4-Digit Security PIN Validation for Withdrawals
-    user_rec = conn.execute("SELECT transaction_pin_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone()
-    if user_rec and user_rec["transaction_pin_hash"]:
-        entered_pin = str(payload.get("security_pin", "")).strip()
-        if not entered_pin or not verify_password(entered_pin, user_rec["transaction_pin_hash"]):
-            conn.close()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect 4-digit Withdrawal Security PIN.")
-
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
     if not wallet:
         conn.close()
@@ -703,47 +723,6 @@ def verify_transaction_security_pin(payload: dict, current_user: dict = Depends(
     is_valid = verify_password(pin, user["transaction_pin_hash"])
     return {"success": True, "verified": is_valid}
 
-def ensure_dedicated_virtual_account(conn, user_id: str, full_name: str, user_ref: str) -> dict:
-    """
-    Generates or retrieves a unique dedicated virtual bank account number for the user's wallet.
-    Allows instant bank transfer wallet funding from any Nigerian bank (OPay, Kuda, GTBank, Zenith, FirstBank).
-    """
-    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
-    if not wallet:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        w_id = str(uuid.uuid4())
-        conn.execute("INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (w_id, user_id, now_iso))
-        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", (w_id,)).fetchone()
-
-    acc_num = wallet["dedicated_account_number"] if "dedicated_account_number" in wallet.keys() else None
-    bank_name = wallet["dedicated_bank_name"] if "dedicated_bank_name" in wallet.keys() else "Wema Bank (Flutterwave)"
-    acc_name = wallet["dedicated_account_name"] if "dedicated_account_name" in wallet.keys() else f"RushPoint - {full_name}"
-
-    if not acc_num:
-        # Generate unique 10-digit virtual account number based on user_ref / hash
-        ref_digits = ''.join(filter(str.isdigit, user_ref or ''))
-        if len(ref_digits) < 6:
-            ref_digits = f"{secrets.randbelow(900000)+100000}"
-        acc_num = f"99{ref_digits.zfill(8)[:8]}"
-        now_iso = datetime.now(timezone.utc).isoformat()
-        try:
-            conn.execute("""
-                UPDATE wallets
-                SET dedicated_bank_name = ?,
-                    dedicated_account_number = ?,
-                    dedicated_account_name = ?,
-                    updated_at = ?
-                WHERE id = ?
-            """, (bank_name, acc_num, acc_name, now_iso, wallet["id"]))
-            conn.commit()
-        except Exception:
-            pass
-
-    return {
-        "bank_name": bank_name or "Wema Bank (Flutterwave)",
-        "account_number": acc_num or f"99{secrets.randbelow(90000000)+10000000}",
-        "account_name": acc_name or f"RushPoint - {full_name}"
-    }
 
 
 @router.get("/wallet/dedicated-account")

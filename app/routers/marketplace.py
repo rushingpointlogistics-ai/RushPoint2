@@ -247,35 +247,26 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
     platform_fee = 150.0
     total_amount = subtotal + delivery_fee + platform_fee
     
-    # Check Customer Wallet Balance
-    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
-    if not wallet or wallet["balance"] < total_amount:
-        conn.close()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=f"Insufficient wallet funds. Required: ₦{total_amount:,.2f}, Current Balance: ₦{wallet['balance'] if wallet else 0.0:,.2f}. Please top up your wallet."
-        )
-        
     order_id = str(uuid.uuid4())
     order_ref = f"RP-ORD-{secrets.randbelow(900000) + 100000}"
     pod_otp = f"{secrets.randbelow(9000) + 1000}" # 4-digit security code
     now_iso = datetime.now(timezone.utc).isoformat()
     
-    # 1. Payment Processing (Flutterwave vs RP Wallet)
-    is_flutterwave = (req.payment_method or "").upper() in ["FLUTTERWAVE", "CARD", "FLW_DEMO"]
+    # 1. Multi-Payment Processing (Gateway / Transfer / Card / USSD vs RP Wallet Escrow)
+    method_upper = (req.payment_method or "WALLET").upper()
+    is_gateway = method_upper in ["FLUTTERWAVE", "CARD", "BANK_TRANSFER", "USSD", "QR_CODE"]
     
-    if is_flutterwave:
-        # Paid via Flutterwave Gateway (Simulated Instant Clearance)
-        payment_method_label = "FLUTTERWAVE"
+    if is_gateway:
+        payment_method_label = method_upper
     else:
-        # Paid via RushingPoint Customer Wallet
+        # Paid via RushingPoint Customer Wallet Escrow
         payment_method_label = "RP_WALLET"
         wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
         if not wallet or wallet["balance"] < total_amount:
             conn.close()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail=f"Insufficient wallet funds. Required: ₦{total_amount:,.2f}, Current Balance: ₦{wallet['balance'] if wallet else 0.0:,.2f}. Please top up or pay with Flutterwave."
+                detail=f"Insufficient wallet funds. Required: ₦{total_amount:,.2f}, Current Balance: ₦{wallet['balance'] if wallet else 0.0:,.2f}. Please fund your wallet or pay with Bank Transfer / Card."
             )
         new_balance = wallet["balance"] - total_amount
         conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_balance, now_iso, wallet["id"]))
