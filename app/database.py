@@ -15,23 +15,24 @@ def get_db_connection():
     return conn
 
 def init_db():
-
-    # Dedicated Virtual Account Columns for Wallets
-    try:
-        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_bank_name TEXT DEFAULT 'Wema Bank (Flutterwave)'")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_account_number TEXT DEFAULT NULL")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_account_name TEXT DEFAULT NULL")
-    except Exception:
-        pass
-
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Safe column migrations — run before CREATE TABLE IF NOT EXISTS
+    # Dedicated Virtual Account columns for Wallets
+    for col_ddl in [
+        "ALTER TABLE wallets ADD COLUMN dedicated_bank_name TEXT",
+        "ALTER TABLE wallets ADD COLUMN dedicated_account_number TEXT",
+        "ALTER TABLE wallets ADD COLUMN dedicated_account_name TEXT",
+        "ALTER TABLE wallets ADD COLUMN transaction_pin_hash TEXT",
+        "ALTER TABLE users ADD COLUMN transaction_pin_hash TEXT",
+    ]:
+        try:
+            cursor.execute(col_ddl)
+        except Exception:
+            pass  # Column already exists
+
+
 
     # 1. Users table
     cursor.execute("""
@@ -45,6 +46,7 @@ def init_db():
         account_type TEXT NOT NULL, -- ADMIN, STAFF, VENDOR, RIDER, CUSTOMER
         status TEXT NOT NULL DEFAULT 'ACTIVE', -- PENDING, UNDER_REVIEW, ACTIVE, SUSPENDED, DISABLED, REJECTED
         role_name TEXT NOT NULL DEFAULT 'Customer',
+        transaction_pin_hash TEXT DEFAULT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )
@@ -298,6 +300,9 @@ def init_db():
         user_id TEXT UNIQUE NOT NULL,
         balance REAL NOT NULL DEFAULT 0.0,
         currency TEXT NOT NULL DEFAULT 'NGN',
+        dedicated_bank_name TEXT DEFAULT 'Wema Bank (Flutterwave)',
+        dedicated_account_number TEXT DEFAULT NULL,
+        dedicated_account_name TEXT DEFAULT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id)
     )
