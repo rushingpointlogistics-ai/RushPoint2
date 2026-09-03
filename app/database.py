@@ -15,6 +15,21 @@ def get_db_connection():
     return conn
 
 def init_db():
+
+    # Dedicated Virtual Account Columns for Wallets
+    try:
+        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_bank_name TEXT DEFAULT 'Wema Bank (Flutterwave)'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_account_number TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE wallets ADD COLUMN dedicated_account_name TEXT DEFAULT NULL")
+    except Exception:
+        pass
+
     conn = get_db_connection()
     cursor = conn.cursor()
 

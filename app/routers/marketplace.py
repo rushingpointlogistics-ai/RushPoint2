@@ -424,3 +424,68 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
         "pod_otp": pod_otp,
         "status": "NEW"
     }
+
+
+@router.get("/geocode")
+def geocode_address_endpoint(query: str):
+    """
+    Geocodes text address / landmark to canonical GPS coordinates aligned with map.
+    """
+    from app.services.routing_service import geocode_address
+    res = geocode_address(query)
+    return {"success": True, "location": res}
+
+
+@router.get("/reverse-geocode")
+def reverse_geocode_endpoint(lat: float, lon: float):
+    """
+    Converts GPS coordinates to canonical place and street name.
+    """
+    from app.services.routing_service import reverse_geocode_coordinates
+    res = reverse_geocode_coordinates(lat, lon)
+    return {"success": True, "address": res}
+
+
+@router.post("/calculate-delivery-quote")
+def calculate_live_delivery_quote(payload: dict):
+    """
+    Live location-triggered road distance & delivery quotation endpoint.
+    Calculates exact metres / km between vendor stall and customer destination.
+    """
+    store_id = payload.get("store_id")
+    customer_lat = float(payload.get("customer_lat", 12.9908))
+    customer_lon = float(payload.get("customer_lon", 7.6018))
+    cargo_weight_kg = float(payload.get("cargo_weight_kg", 2.0))
+    vehicle_type = payload.get("vehicle_type", "MOTORCYCLE")
+
+    conn = get_db_connection()
+    store = None
+    if store_id:
+        store = conn.execute("SELECT * FROM stores WHERE id = ?", (store_id,)).fetchone()
+    if not store:
+        store = conn.execute("SELECT * FROM stores WHERE is_active = 1 LIMIT 1").fetchone()
+    conn.close()
+
+    origin_lat = float(store["latitude"]) if store and store["latitude"] else 12.9908
+    origin_lon = float(store["longitude"]) if store and store["longitude"] else 7.6018
+
+    quote = calculate_road_distance_and_fee(
+        origin_lat=origin_lat,
+        origin_lon=origin_lon,
+        dest_lat=customer_lat,
+        dest_lon=customer_lon,
+        cargo_weight_kg=cargo_weight_kg,
+        vehicle_type=vehicle_type
+    )
+
+    return {
+        "success": True,
+        "store": {
+            "id": store["id"] if store else None,
+            "store_name": store["store_name"] if store else "Vendor Store",
+            "address": store["address"] if store else "Katsina Commercial Hub",
+            "latitude": origin_lat,
+            "longitude": origin_lon
+        },
+        "routing": quote
+    }
