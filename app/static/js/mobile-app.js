@@ -1829,13 +1829,25 @@ const MobileApp = {
             <!-- Milestone Activity Log -->
             <div style="font-weight: 800; font-size: 0.78rem; margin-bottom: 8px; color: #1E293B;">Activity Log</div>
             <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 150px; overflow-y: auto;">
-              ${timeline.map(t => `
-                <div style="font-size: 0.7rem;">
-                  <span style="font-weight: 800; color: #B91C1C;">${t.to_status}</span>
-                  <div style="font-size: 0.64rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
-                  ${t.notes ? `<div style="font-size: 0.64rem; color: #64748B;">${t.notes}</div>` : ''}
-                </div>
-              `).join('')}
+              ${timeline.map(t => {
+                const isComp = t.actor_role === 'Auto-Compensation Engine';
+                if (isComp) {
+                  return `
+                    <div style="background: linear-gradient(135deg, #ECFDF5, #D1FAE5); border: 1.5px solid #6EE7B7; border-radius: 10px; padding: 8px 12px; margin-bottom: 2px;">
+                      <div style="font-size: 0.72rem; font-weight: 900; color: #065F46;">🎁 Late Delivery Compensation Credited!</div>
+                      <div style="font-size: 0.66rem; color: #047857; margin-top: 2px;">${t.notes || ''}</div>
+                      <div style="font-size: 0.60rem; color: #6B7280; margin-top: 3px;">${new Date(t.timestamp).toLocaleString()}</div>
+                    </div>
+                  `;
+                }
+                return `
+                  <div style="font-size: 0.7rem;">
+                    <span style="font-weight: 800; color: #B91C1C;">${t.to_status}</span>
+                    <div style="font-size: 0.64rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
+                    ${t.notes ? `<div style="font-size: 0.64rem; color: #64748B;">${t.notes}</div>` : ''}
+                  </div>
+                `;
+              }).join('')}
             </div>
           </div>
         </div>

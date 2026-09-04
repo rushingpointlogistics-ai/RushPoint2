@@ -366,3 +366,188 @@ def check_and_escalate_stale_assignments():
         "message": f"Escalation complete: {len(escalated)} unresponsive assignments re-routed to next nearest couriers."
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LATE DELIVERY COMPENSATION ENGINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/late-delivery-settings")
+def get_late_delivery_settings(current_user: dict = Depends(require_role(["ADMIN", "STAFF", "Super Admin"]))):
+    """Return admin-configured late delivery compensation settings."""
+    conn = get_db_connection()
+    threshold_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_threshold_minutes'"
+    ).fetchone()
+    amount_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_credit_amount'"
+    ).fetchone()
+    enabled_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_compensation_enabled'"
+    ).fetchone()
+    conn.close()
+    return {
+        "success": True,
+        "threshold_minutes": int(threshold_row["value"]) if threshold_row else 45,
+        "credit_amount_ngn": float(amount_row["value"]) if amount_row else 500.0,
+        "enabled": (enabled_row["value"] == "true") if enabled_row else True,
+    }
+
+
+@router.post("/late-delivery-settings")
+def update_late_delivery_settings(
+    payload: dict,
+    current_user: dict = Depends(require_role(["ADMIN", "Super Admin"]))
+):
+    """Admin sets the late delivery compensation threshold and credit amount."""
+    threshold = int(payload.get("threshold_minutes", 45))
+    amount = float(payload.get("credit_amount_ngn", 500.0))
+    enabled = bool(payload.get("enabled", True))
+
+    if threshold < 5:
+        raise HTTPException(status_code=400, detail="Threshold must be at least 5 minutes.")
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Credit amount cannot be negative.")
+
+    conn = get_db_connection()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for key, val, desc in [
+        ("late_delivery_threshold_minutes", str(threshold), "Minutes after which a late delivery triggers auto-compensation"),
+        ("late_delivery_credit_amount", str(amount), "NGN amount credited to customer wallet on late delivery"),
+        ("late_delivery_compensation_enabled", "true" if enabled else "false", "Whether auto late-delivery compensation is active"),
+    ]:
+        conn.execute("""
+            INSERT INTO system_settings (key, value, description, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+        """, (key, val, desc, now_iso))
+
+    log_audit(conn, current_user["id"], "UPDATE", "system_settings", "late_delivery_config",
+              f"Set threshold={threshold}min, credit=₦{amount}, enabled={enabled}")
+    conn.commit()
+    conn.close()
+    return {
+        "success": True,
+        "message": f"Late delivery compensation updated: ₦{amount:,.0f} credited after {threshold} minutes. Enabled: {enabled}."
+    }
+
+
+@router.post("/check-late-deliveries")
+def check_and_compensate_late_deliveries():
+    """
+    Late Delivery Auto-Compensation Engine (called by admin polling every 12 seconds):
+    - Reads threshold_minutes and credit_amount_ngn from system_settings.
+    - Finds all orders in ASSIGNED / PICKED_UP / IN_TRANSIT whose updated_at exceeds the threshold.
+    - Credits the customer wallet ONCE per order (idempotent — checks for existing reference).
+    - Records a timeline event and wallet transaction.
+    """
+    conn = get_db_connection()
+
+    # Read config
+    enabled_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_compensation_enabled'"
+    ).fetchone()
+    if enabled_row and enabled_row["value"] == "false":
+        conn.close()
+        return {"success": True, "compensated_count": 0, "message": "Late delivery compensation is disabled."}
+
+    threshold_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_threshold_minutes'"
+    ).fetchone()
+    amount_row = conn.execute(
+        "SELECT value FROM system_settings WHERE key = 'late_delivery_credit_amount'"
+    ).fetchone()
+
+    threshold_minutes = int(threshold_row["value"]) if threshold_row else 45
+    credit_amount = float(amount_row["value"]) if amount_row else 500.0
+    threshold_seconds = threshold_minutes * 60
+
+    now_utc = datetime.now(timezone.utc)
+    now_iso = now_utc.isoformat()
+
+    # Fetch in-flight orders
+    in_flight_orders = conn.execute("""
+        SELECT id, order_ref, customer_id, updated_at, status
+        FROM orders
+        WHERE status IN ('ASSIGNED', 'PICKED_UP', 'IN_TRANSIT')
+    """).fetchall()
+
+    compensated = []
+
+    for o in in_flight_orders:
+        updated_at_str = o["updated_at"]
+        if not updated_at_str:
+            continue
+        try:
+            up_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+            age_seconds = (now_utc - up_dt).total_seconds()
+        except Exception:
+            continue
+
+        if age_seconds < threshold_seconds:
+            continue
+
+        # Idempotency — check if we already compensated this order
+        comp_ref = f"LATE-COMP-{o['order_ref']}"
+        existing = conn.execute(
+            "SELECT id FROM wallet_transactions WHERE reference = ?", (comp_ref,)
+        ).fetchone()
+        if existing:
+            continue  # already credited
+
+        # Find/create customer wallet
+        wallet = conn.execute(
+            "SELECT * FROM wallets WHERE user_id = ?", (o["customer_id"],)
+        ).fetchone()
+        if not wallet:
+            # Create wallet if missing (edge case)
+            wallet_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0, 'NGN', ?)",
+                (wallet_id, o["customer_id"], now_iso)
+            )
+            conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet_id,))
+            wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (o["customer_id"],)).fetchone()
+
+        new_balance = (wallet["balance"] or 0.0) + credit_amount
+        conn.execute(
+            "UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?",
+            (new_balance, now_iso, wallet["id"])
+        )
+        conn.execute("""
+            INSERT INTO wallet_transactions
+                (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()), wallet["id"], o["customer_id"],
+            comp_ref, credit_amount,
+            f"🎁 Late Delivery Compensation — Order #{o['order_ref']} took longer than {threshold_minutes} mins. Sorry for the wait!",
+            new_balance, now_iso
+        ))
+
+        # Record in order timeline
+        conn.execute("""
+            INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()), o["id"], o["status"], o["status"],
+            "SYSTEM_COMPENSATION", "Auto-Compensation Engine",
+            f"🎁 ₦{credit_amount:,.0f} late delivery credit automatically added to customer wallet (delivery exceeded {threshold_minutes}-minute promise).",
+            now_iso
+        ))
+
+        compensated.append({
+            "order_ref": o["order_ref"],
+            "customer_id": o["customer_id"],
+            "credit_ngn": credit_amount,
+            "elapsed_minutes": round(age_seconds / 60, 1)
+        })
+
+    conn.commit()
+    conn.close()
+    return {
+        "success": True,
+        "compensated_count": len(compensated),
+        "compensated_orders": compensated,
+        "message": f"Compensation run complete: {len(compensated)} customer(s) credited ₦{credit_amount:,.0f} for late deliveries."
+    }
+

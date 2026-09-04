@@ -158,6 +158,8 @@ const AdminPortal = {
       this.mountDashboardCharts();
     } else if (this.currentTab === "dispatch") {
       this.mountDispatchMap();
+    } else if (this.currentTab === "finance") {
+      setTimeout(() => this.loadLateDeliverySettings(), 100);
     }
   },
 
@@ -2134,6 +2136,53 @@ const AdminPortal = {
             </div>
           </div>
         ` : ''}
+
+        <!-- 🎁 Late Delivery Auto-Compensation Settings Card -->
+        <div class="rp-card" id="lateCompCard" style="margin-bottom: 20px; padding: 18px; border: 1.5px solid #FDE68A; background: #FFFBEB; border-radius: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 900; color: #92400E; display: flex; align-items: center; gap: 6px;">
+                🎁 Late Delivery Auto-Compensation
+                <span class="badge" id="lateCompBadge" style="background: #D97706; color: #FFF; font-size: 0.6rem;">LOADING...</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #78350F; margin-top: 2px;">
+                When delivery exceeds the promised time, the system <strong>automatically credits</strong> the customer's wallet — no manual action needed.
+              </div>
+            </div>
+          </div>
+          <div id="lateCompForm" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; flex-wrap: wrap;">
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">⏱️ Time Threshold (minutes)</label>
+              <input id="lateCompThreshold" type="number" min="5" max="240" value="45"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;"
+                placeholder="e.g. 45" />
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">Minutes after assignment before credit triggers</div>
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">💰 Auto-Credit Amount (₦)</label>
+              <input id="lateCompAmount" type="number" min="0" step="50" value="500"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;"
+                placeholder="e.g. 500" />
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">NGN added to customer wallet (one-time per order)</div>
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">🔛 Status</label>
+              <select id="lateCompEnabled"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;">
+                <option value="true">✅ Enabled — Auto-Credit Active</option>
+                <option value="false">⏸️ Disabled — Paused</option>
+              </select>
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">Toggle auto-compensation on/off</div>
+            </div>
+            <div>
+              <button onclick="AdminPortal.saveLateDeliverySettings()" class="btn-primary btn-sm"
+                style="background: #D97706; border-color: #B45309; font-weight: 900; white-space: nowrap; padding: 10px 18px; border-radius: 10px; font-size: 0.85rem;">
+                💾 Save Settings
+              </button>
+            </div>
+          </div>
+          <div id="lateCompInfo" style="margin-top: 12px; font-size: 0.72rem; color: #065F46; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 8px 12px; display: none;"></div>
+        </div>
 
         <!-- Admin Master Operations & Delivery Commission Wallet Card -->
         <div style="background: linear-gradient(135deg, #450A0A 0%, #7F1D1D 50%, #B91C1C 100%); color: #FFF; border-radius: 18px; padding: 20px; margin-bottom: 20px; box-shadow: 0 6px 20px rgba(127, 29, 29, 0.25);">
@@ -4449,6 +4498,14 @@ const AdminPortal = {
             if (this.currentTab === 'dispatcher') this.render();
           }
         } catch (escErr) {}
+
+        // Auto-credit customers for late deliveries based on admin-configured threshold
+        try {
+          const lateRes = await API.post('/api/dispatch/check-late-deliveries', {}, { silent: true });
+          if (lateRes && lateRes.compensated_count > 0) {
+            API.showToast(`🎁 ${lateRes.compensated_count} customer(s) auto-credited ₦ for late delivery!`, 'info');
+          }
+        } catch (lateErr) {}
       } catch (e) {}
     }, 12000); // poll every 12 seconds
   },
@@ -4573,6 +4630,56 @@ const AdminPortal = {
       if (window.MobileApp) window.MobileApp.render();
     } catch (e) {
       API.showToast("Could not update customer call policy", "error");
+    }
+  },
+
+  async loadLateDeliverySettings() {
+    try {
+      const res = await API.get("/api/dispatch/late-delivery-settings", { silent: true });
+      if (!res) return;
+      const threshold = document.getElementById("lateCompThreshold");
+      const amount = document.getElementById("lateCompAmount");
+      const enabled = document.getElementById("lateCompEnabled");
+      const badge = document.getElementById("lateCompBadge");
+      if (threshold) threshold.value = res.threshold_minutes || 45;
+      if (amount) amount.value = res.credit_amount_ngn || 500;
+      if (enabled) enabled.value = res.enabled ? "true" : "false";
+      if (badge) {
+        badge.textContent = res.enabled ? "ACTIVE" : "PAUSED";
+        badge.style.background = res.enabled ? "#059669" : "#DC2626";
+      }
+    } catch (e) {}
+  },
+
+  async saveLateDeliverySettings() {
+    const threshold = parseInt(document.getElementById("lateCompThreshold")?.value || "45");
+    const amount = parseFloat(document.getElementById("lateCompAmount")?.value || "500");
+    const enabled = (document.getElementById("lateCompEnabled")?.value || "true") === "true";
+    if (isNaN(threshold) || threshold < 5) {
+      API.showToast("Threshold must be at least 5 minutes.", "error"); return;
+    }
+    if (isNaN(amount) || amount < 0) {
+      API.showToast("Credit amount cannot be negative.", "error"); return;
+    }
+    try {
+      const res = await API.post("/api/dispatch/late-delivery-settings", {
+        threshold_minutes: threshold,
+        credit_amount_ngn: amount,
+        enabled
+      });
+      API.showToast(res.message || "Late delivery settings saved!", "success");
+      const info = document.getElementById("lateCompInfo");
+      const badge = document.getElementById("lateCompBadge");
+      if (info) {
+        info.style.display = "block";
+        info.innerHTML = `✅ <strong>Saved:</strong> Customers will receive <strong>₦${amount.toLocaleString()}</strong> wallet credit if their delivery exceeds <strong>${threshold} minutes</strong>. Status: <strong>${enabled ? "Active ✅" : "Paused ⏸️"}</strong>`;
+      }
+      if (badge) {
+        badge.textContent = enabled ? "ACTIVE" : "PAUSED";
+        badge.style.background = enabled ? "#059669" : "#DC2626";
+      }
+    } catch (e) {
+      API.showToast(e.message || "Failed to save late delivery settings.", "error");
     }
   },
 
