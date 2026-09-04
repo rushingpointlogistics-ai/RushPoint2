@@ -529,9 +529,143 @@
       padding: 4px 10px; border-radius: 6px; font-size: 0.68rem; font-weight: 700; color: var(--gray-400);
     }
 
+    /* TESTIMONIALS SECTION */
+    .testimonials-section {
+      padding: 90px 6%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .testimonial-card {
+      background: #FFFFFF;
+      border: 1px solid var(--gray-200);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .testimonial-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(136, 19, 55, 0.08);
+      border-color: rgba(225, 29, 72, 0.25);
+    }
+    .testimonial-stars { color: #F59E0B; font-size: 1rem; margin-bottom: 12px; }
+    .testimonial-text { font-size: 0.88rem; color: var(--gray-700); line-height: 1.65; margin-bottom: 20px; font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--rp-rose-tint); color: var(--rp-red);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.95rem; flex-shrink: 0;
+    }
+    .author-name { font-size: 0.88rem; font-weight: 800; color: var(--gray-900); }
+    .author-role { font-size: 0.72rem; color: var(--gray-500); }
+
+    /* FAQ ACCORDION SECTION */
+    .faq-section {
+      background: #F8FAFC;
+      border-top: 1px solid var(--gray-200);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 90px 6%;
+    }
+    .faq-container { max-width: 860px; margin: 0 auto; }
+    .faq-item {
+      background: #FFFFFF;
+      border: 1px solid var(--gray-200);
+      border-radius: 16px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+    .faq-item.active { border-color: rgba(225, 29, 72, 0.4); box-shadow: 0 6px 20px rgba(136, 19, 55, 0.05); }
+    .faq-header {
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 800;
+      font-size: 0.96rem;
+      color: var(--gray-900);
+      transition: color 0.2s;
+    }
+    .faq-header:hover { color: var(--rp-bright); }
+    .faq-icon {
+      font-size: 1.1rem;
+      color: var(--rp-bright);
+      transition: transform 0.25s;
+    }
+    .faq-item.active .faq-icon { transform: rotate(180deg); }
+    .faq-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+      padding: 0 22px;
+      font-size: 0.88rem;
+      color: var(--gray-600);
+      line-height: 1.65;
+    }
+    .faq-item.active .faq-body {
+      max-height: 300px;
+      padding-bottom: 18px;
+    }
+
+    /* WHATSAPP FLOATING BUBBLE */
+    .whatsapp-float {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #25D366;
+      color: #FFF;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      box-shadow: 0 6px 20px rgba(37, 211, 102, 0.45);
+      z-index: 9999;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .whatsapp-float:hover {
+      transform: scale(1.08) translateY(-2px);
+      box-shadow: 0 10px 28px rgba(37, 211, 102, 0.6);
+      color: #FFF;
+    }
+    .whatsapp-float .wa-tooltip {
+      position: absolute;
+      right: 68px;
+      background: #0F172A;
+      color: #FFF;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      transform: translateX(6px);
+    }
+    .whatsapp-float:hover .wa-tooltip {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
     /* RESPONSIVE */
     @media (max-width: 1100px) {
       .steps-grid { grid-template-columns: repeat(2, 1fr); }
+      .testimonials-grid { grid-template-columns: repeat(2, 1fr); }
       .footer-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 900px) {
@@ -577,6 +711,8 @@
     <li><a href="#how-it-works">How It Works</a></li>
     <li><a href="#features">Features</a></li>
     <li><a href="#calculator">Live Pricing</a></li>
+    <li><a href="#testimonials">Reviews</a></li>
+    <li><a href="#faq">FAQ</a></li>
     <li><a href="#download">Download</a></li>
     <li><a href="/invite-signup.html">Become a Partner</a></li>
   </ul>
@@ -591,6 +727,8 @@
   <a href="#how-it-works" onclick="toggleMobileNav()">How It Works</a>
   <a href="#features" onclick="toggleMobileNav()">Features</a>
   <a href="#calculator" onclick="toggleMobileNav()">Live Pricing Calculator</a>
+  <a href="#testimonials" onclick="toggleMobileNav()">Customer Reviews</a>
+  <a href="#faq" onclick="toggleMobileNav()">FAQ</a>
   <a href="#download" onclick="toggleMobileNav()">Download App</a>
   <a href="/invite-signup.html" onclick="toggleMobileNav()">Become a Partner</a>
   <a href="/app" onclick="toggleMobileNav()" style="color:#FB7185;">Open Web App &rarr;</a>
@@ -889,6 +1027,120 @@
   </div>
 </section>
 
+<!-- TESTIMONIALS SECTION -->
+<section class="testimonials-section" id="testimonials">
+  <div style="text-align:center; margin-bottom:50px;">
+    <span class="section-eyebrow">Verified Testimonials &amp; Real Trust</span>
+    <h2 class="section-heading">Loved by Customers, Merchants &amp; Couriers</h2>
+    <p class="section-sub" style="margin:0 auto;text-align:center;">
+      See how RushPoint is powering everyday commerce and safe deliveries across Katsina metro.
+    </p>
+  </div>
+  <div class="testimonials-grid">
+    <div class="testimonial-card">
+      <div>
+        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <p class="testimonial-text">&ldquo;I ordered 4 loaves of family bread from Muhabbik Bakery to my house in GRA. The rider arrived in 14 minutes and verified my 4-digit PIN before releasing the order. Super fast and reliable!&rdquo;</p>
+      </div>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar">FA</div>
+        <div>
+          <div class="author-name">Fatima Abubakar</div>
+          <div class="author-role">Verified Customer &bull; GRA Katsina</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <div>
+        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <p class="testimonial-text">&ldquo;As a physical merchant stall owner at Central Market, RushPoint helped me receive instant 100% payments with zero deduction on my products. The courier dispatch is automated!&rdquo;</p>
+      </div>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar">AV</div>
+        <div>
+          <div class="author-name">Almusik Venture</div>
+          <div class="author-role">Verified Merchant &bull; Central Commercial Market</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <div>
+        <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <p class="testimonial-text">&ldquo;Getting 80% of every delivery fee credited directly to my wallet the exact second the customer gives me their 4-digit PIN is unbeatable. Fair, transparent, and respectful.&rdquo;</p>
+      </div>
+      <div class="testimonial-author">
+        <div class="testimonial-avatar">IM</div>
+        <div>
+          <div class="author-name">Ibrahim Musa</div>
+          <div class="author-role">Internal Motorcycle Rider &bull; Katsina Metro</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ ACCORDION SECTION -->
+<section class="faq-section" id="faq">
+  <div class="faq-container">
+    <div style="text-align:center; margin-bottom:44px;">
+      <span class="section-eyebrow">Frequently Asked Questions</span>
+      <h2 class="section-heading">Got Questions? We Have Answers.</h2>
+      <p class="section-sub" style="margin:0 auto;text-align:center;">
+        Everything you need to know about shopping, delivery fees, escrow security, and payments.
+      </p>
+    </div>
+
+    <div class="faq-item active" onclick="toggleFaq(this)">
+      <div class="faq-header">
+        <span>How does the road distance delivery fee work?</span>
+        <span class="faq-icon">&#9660;</span>
+      </div>
+      <div class="faq-body">
+        RushPoint calculates your delivery fee using live OSRM road kilometres directly from the merchant's physical stall to your GPS coordinates. If you purchase multiple items from the same store, only a small +0.2% fee per extra item is added, and orders with over 5 products receive a +4% handling surcharge. No flat-rate guesswork!
+      </div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-header">
+        <span>Is my payment safe if a rider doesn't show up?</span>
+        <span class="faq-icon">&#9660;</span>
+      </div>
+      <div class="faq-body">
+        Yes, 100%. Every purchase is protected by 4-digit Delivery PIN Escrow. Your payment is held safely in escrow and is only released when you physically inspect your parcel and hand your unique 4-digit PIN to the courier. If an order fails, funds remain in escrow and are refunded directly to your wallet.
+      </div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-header">
+        <span>What payment methods can I use to pay or top up?</span>
+        <span class="faq-icon">&#9660;</span>
+      </div>
+      <div class="faq-body">
+        RushPoint supports multi-channel Flutterwave payments: direct Bank Transfer (every customer gets a unique dedicated Wema Bank virtual account), Debit Cards (Mastercard, Visa, Verve), USSD codes, QR Code, and direct RushPoint Wallet balance.
+      </div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-header">
+        <span>How do merchants join and receive their payouts?</span>
+        <span class="faq-icon">&#9660;</span>
+      </div>
+      <div class="faq-body">
+        Merchants can register via the Partner Onboarding link. Once verified, stall owners receive 100% of their assigned product price with zero commission deductions. Sale revenues are credited to the merchant's wallet immediately when an order is placed.
+      </div>
+    </div>
+
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-header">
+        <span>How much do riders earn per delivery?</span>
+        <span class="faq-icon">&#9660;</span>
+      </div>
+      <div class="faq-body">
+        Couriers receive an industry-leading 80% share of the total delivery fee for every completed mission. The moment the delivery PIN is confirmed on the courier's phone, earnings are deposited directly into their wallet for immediate withdrawal.
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- DOWNLOAD CTA -->
 <section class="download-section" id="download">
@@ -1009,7 +1261,25 @@
     }
   })();
 
+  function toggleFaq(item) {
+    var wasActive = item.classList.contains('active');
+    document.querySelectorAll('.faq-item').forEach(function(el) {
+      el.classList.remove('active');
+    });
+    if (!wasActive) {
+      item.classList.add('active');
+    }
+  }
+
   calculateLiveQuote();
 </script>
+
+<!-- WHATSAPP FLOATING SUPPORT BUBBLE -->
+<a href="https://wa.me/2348000000000?text=Hello%20RushPoint%20Support%2C%20I%20need%20assistance"
+   target="_blank" rel="noopener" class="whatsapp-float" aria-label="Chat on WhatsApp">
+  <span class="wa-tooltip">Chat with RushPoint Support</span>
+  💬
+</a>
+
 </body>
 </html>

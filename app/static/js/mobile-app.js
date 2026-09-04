@@ -14,6 +14,9 @@ const MobileApp = {
   selectedCategory: "",
   searchQuery: "",
   notifications: [],
+  hideBalance: localStorage.getItem('rp_hide_balance') === 'true',
+  isStoreClosed: localStorage.getItem('rp_store_closed') === 'true',
+  isRiderOnline: localStorage.getItem('rp_rider_online') !== 'false',
 
   init() {
     this.render();
@@ -37,6 +40,44 @@ const MobileApp = {
       } else {
         this.renderAdminMobileApp(container, user);
       }
+    }
+  },
+
+  toggleBalanceVisibility() {
+    this.hideBalance = !this.hideBalance;
+    localStorage.setItem('rp_hide_balance', this.hideBalance);
+    this.render();
+  },
+
+  selectSavedAddress(addr, lat, lon) {
+    const input = document.getElementById('checkout-address');
+    if (input) input.value = addr;
+    this.deliveryLat = lat;
+    this.deliveryLng = lon;
+    API.showToast(`📍 Location: ${addr}`, 'success');
+  },
+
+  toggleStoreOpenStatus() {
+    this.isStoreClosed = !this.isStoreClosed;
+    localStorage.setItem('rp_store_closed', this.isStoreClosed);
+    API.showToast(this.isStoreClosed ? '🔴 Store is now marked as CLOSED' : '🟢 Store is now OPEN for orders!', this.isStoreClosed ? 'info' : 'success');
+    this.render();
+  },
+
+  toggleRiderOnlineStatus() {
+    this.isRiderOnline = !this.isRiderOnline;
+    localStorage.setItem('rp_rider_online', this.isRiderOnline);
+    API.showToast(this.isRiderOnline ? '🟢 You are now ONLINE & ready for missions!' : '⚪ You are now OFF-DUTY', this.isRiderOnline ? 'success' : 'info');
+    this.render();
+  },
+
+  async toggleProductQuickStock(productId, newQty) {
+    try {
+      await API.put(`/api/products/${productId}`, { stock_qty: newQty });
+      API.showToast(newQty > 0 ? '✅ Product is now IN STOCK!' : '⏸️ Product marked as OUT OF STOCK', 'success');
+      this.render();
+    } catch(e) {
+      API.showToast('Could not update product stock', 'error');
     }
   },
 
@@ -414,10 +455,25 @@ const MobileApp = {
           </div>
         </div>
 
-        <!-- App Body Content -->
         <div class="mobile-content-area" id="mob-content-area">
           ${this.getCustomerTabHtml(categories, products, stores, wallet, user, orders)}
         </div>
+
+        <!-- Floating Cart Summary Bar (When items in cart and not on cart tab) -->
+        ${cartCount > 0 && this.activeTab !== 'cart' ? `
+          <div style="position: absolute; bottom: 66px; left: 14px; right: 14px; background: linear-gradient(135deg, #7F1D1D 0%, #BE123C 100%); color: #FFF; padding: 10px 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 8px 24px rgba(127,29,29,0.38); z-index: 100;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.2rem;">🛍️</span>
+              <div>
+                <div style="font-size: 0.82rem; font-weight: 800;">${cartCount} items in cart</div>
+                <div style="font-size: 0.68rem; opacity: 0.9;">Ready for fast checkout</div>
+              </div>
+            </div>
+            <button onclick="MobileApp.switchTab('cart')" style="background: #FFF; color: #881337; border: none; padding: 6px 14px; border-radius: 10px; font-weight: 900; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+              Checkout ➔
+            </button>
+          </div>
+        ` : ''}
 
         <!-- OPay Style 5-Tab Bottom Navigation -->
         <div class="mobile-bottom-nav">
@@ -574,8 +630,14 @@ const MobileApp = {
             <div style="font-size: 0.72rem; font-weight: 700; opacity: 0.85; letter-spacing: 0.5px; text-transform: uppercase;">Total Wallet Balance</div>
             <span style="background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 700;">🔒 Tier-3 Verified</span>
           </div>
-          <div style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.5px; margin: 4px 0 12px; display: flex; align-items: center; gap: 8px;">
-            <span>₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+          <div style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.5px; margin: 4px 0 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>${MobileApp.hideBalance ? '••••••••' : '₦' + wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              <button onclick="MobileApp.toggleBalanceVisibility()" style="background: rgba(255,255,255,0.18); border: none; border-radius: 8px; color: #FFF; padding: 4px 7px; font-size: 0.82rem; cursor: pointer; display: flex; align-items: center;" title="Toggle balance visibility">
+                ${MobileApp.hideBalance ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <span style="font-size: 0.65rem; background: rgba(0,0,0,0.22); padding: 3px 8px; border-radius: 8px; font-weight: 700; opacity: 0.9;">Wema Bank Escrow</span>
           </div>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px;">
@@ -1174,11 +1236,18 @@ const MobileApp = {
             </div>
           </div>
 
-          <div style="margin-top: 14px;">
             <div class="rp-form-group">
               <label class="rp-label">Delivery Address</label>
-              <input type="text" id="checkout-address" class="rp-input" value="14 Marina Street, Lagos Island" placeholder="Street, landmark, city" style="border-radius: 10px;">
-              <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 5px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
+              <input type="text" id="checkout-address" class="rp-input" value="GRA Residential Main Road, Katsina" placeholder="Street, landmark, city" style="border-radius: 10px;">
+              
+              <!-- Quick Saved Delivery Addresses -->
+              <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                <button type="button" onclick="MobileApp.selectSavedAddress('GRA Residential Main Road, Katsina', 12.9820, 7.5950)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏠 Home (GRA)</button>
+                <button type="button" onclick="MobileApp.selectSavedAddress('UMYU University Campus, Katsina', 12.8950, 7.6320)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏫 Campus (UMYU)</button>
+                <button type="button" onclick="MobileApp.selectSavedAddress('Katsina Central Commercial Market', 12.9908, 7.6018)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏬 Market Hub</button>
+              </div>
+
+              <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 6px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
                 📍 Use My Device GPS Location (Auto-Detect)
               </button>
             </div>
@@ -1417,29 +1486,90 @@ const MobileApp = {
       const o = res.order;
       const timeline = res.timeline || [];
 
+      // Determine numeric step for 4-stage stepper
+      let currentStep = 1;
+      const s = (o.status || "").toUpperCase();
+      if (s === "DELIVERED") currentStep = 4;
+      else if (s === "IN_TRANSIT" || s === "PICKED_UP" || s === "ARRIVED") currentStep = 3;
+      else if (s === "CONFIRMED" || s === "PREPARING" || s === "ASSIGNED") currentStep = 2;
+      else currentStep = 1;
+
+      const stepProgressPct = currentStep === 1 ? 0 : currentStep === 2 ? 33 : currentStep === 3 ? 66 : 100;
+
       const modal = document.createElement("div");
       modal.className = "modal-backdrop rp-modal-overlay";
       modal.innerHTML = `
-        <div class="modal-dialog" style="max-width: 360px; border-radius: 20px;">
-          <div class="modal-header">
-            <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">Tracking: ${o.order_ref}</h3>
-            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        <div class="modal-dialog" style="max-width: 380px; border-radius: 22px; overflow: hidden; padding: 0;">
+          <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.7rem; opacity: 0.85; text-transform: uppercase; font-weight: 700;">Live Dispatch Radar</div>
+              <h3 style="font-size: 1.05rem; font-weight: 900; margin: 0;">${o.order_ref}</h3>
+            </div>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
           </div>
-          <div style="margin-bottom: 12px; font-size: 0.75rem;">
-            <div>Status: <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span></div>
-            <div style="margin-top: 2px;">Store: <strong>${o.store_name}</strong></div>
-            <div style="margin-top: 2px;">Destination: <strong>${o.delivery_address}</strong></div>
-            ${o.rider_name ? `<div style="margin-top: 2px;">Assigned Rider: <strong>${o.rider_name}</strong></div>` : ''}
-          </div>
-          <div style="font-weight: 800; font-size: 0.8rem; margin-bottom: 8px;">Order Timeline</div>
-          <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px;">
-            ${timeline.map(t => `
-              <div style="font-size: 0.72rem;">
-                <span style="font-weight: 700; color: #B91C1C;">${t.to_status}</span>
-                <div style="font-size: 0.65rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
-                ${t.notes ? `<div style="font-size: 0.65rem; color: #64748B;">${t.notes}</div>` : ''}
+
+          <div style="padding: 16px;">
+            <!-- 4-Stage Visual Progress Stepper -->
+            <div style="display: flex; justify-content: space-between; position: relative; margin: 12px 6px 20px; text-align: center;">
+              <div style="position: absolute; top: 12px; left: 12%; right: 12%; height: 3px; background: #E2E8F0; z-index: 1;"></div>
+              <div style="position: absolute; top: 12px; left: 12%; width: ${stepProgressPct * 0.76}%; height: 3px; background: #059669; z-index: 2; transition: width 0.3s;"></div>
+              
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 1 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 1 ? '✓' : '1'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Placed</span>
               </div>
-            `).join('')}
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 2 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 2 ? '✓' : '2'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Preparing</span>
+              </div>
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 3 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 3 ? '✓' : '3'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">In Transit</span>
+              </div>
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 4 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 4 ? '✓' : '4'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Delivered</span>
+              </div>
+            </div>
+
+            <!-- Prominent Delivery PIN Card (If not delivered) -->
+            ${o.pod_otp && o.status !== 'DELIVERED' ? `
+              <div style="background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 12px; margin-bottom: 14px; text-align: center; box-shadow: 0 4px 12px rgba(245,158,11,0.12);">
+                <div style="font-size: 0.68rem; font-weight: 800; color: #92400E; text-transform: uppercase; letter-spacing: 0.5px;">🔒 Your 4-Digit Delivery PIN</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #B45309; letter-spacing: 6px; margin: 4px 0;">${o.pod_otp}</div>
+                <div style="font-size: 0.68rem; color: #78350F; line-height: 1.35;">Show this code to courier <strong>only after</strong> you physically inspect your parcel!</div>
+              </div>
+            ` : ''}
+
+            <!-- Key Order Details -->
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 14px; font-size: 0.74rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: #64748B;">Current Status:</span>
+                <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span>
+              </div>
+              <div style="margin-top: 4px;">🏪 Store: <strong>${o.store_name}</strong></div>
+              <div style="margin-top: 4px;">📍 Destination: <strong>${o.delivery_address}</strong></div>
+              ${o.rider_name ? `<div style="margin-top: 4px;">🛵 Assigned Courier: <strong>${o.rider_name}</strong></div>` : ''}
+              
+              <!-- Direct Contact Rider Buttons -->
+              ${o.rider_phone ? `
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                  <a href="tel:${o.rider_phone}" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #0284C7;">📞 Call Rider</a>
+                  <a href="https://wa.me/${o.rider_phone.replace('+', '')}?text=Hello%20Rider%2C%20I%20am%20the%20customer%20for%20order%20${o.order_ref}" target="_blank" class="btn-secondary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #059669; border-color: #A7F3D0; background: #ECFDF5;">💬 WhatsApp</a>
+                </div>
+              ` : ''}
+            </div>
+
+            <div style="font-weight: 800; font-size: 0.8rem; margin-bottom: 8px; color: #1E293B;">Milestone Timeline</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 180px; overflow-y: auto;">
+              ${timeline.map(t => `
+                <div style="font-size: 0.72rem;">
+                  <span style="font-weight: 800; color: #B91C1C;">${t.to_status}</span>
+                  <div style="font-size: 0.65rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
+                  ${t.notes ? `<div style="font-size: 0.65rem; color: #64748B;">${t.notes}</div>` : ''}
+                </div>
+              `).join('')}
+            </div>
           </div>
         </div>
       `;
@@ -1779,11 +1909,17 @@ const MobileApp = {
     if (this.vendorActiveTab === "dashboard") {
       return `
         <!-- Top Branded RushPoint Bar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 2px 4px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="height: 38px; width: 38px; border-radius: 10px; object-fit: contain; background: #FFFFFF; padding: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" alt="RushPoint">
             <span style="font-weight:900;font-size:1.05rem;color:#881337;">Rush<span style="color:#BE123C;">Point</span></span>
           </div>
-          <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant Storefront</div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button onclick="MobileApp.toggleStoreOpenStatus()" style="display: flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 800; color: ${MobileApp.isStoreClosed ? '#DC2626' : '#15803D'}; background: ${MobileApp.isStoreClosed ? '#FEF2F2' : '#DCFCE7'}; border: 1px solid ${MobileApp.isStoreClosed ? '#FCA5A5' : '#86EFAC'}; padding: 3px 8px; border-radius: 10px; cursor: pointer;">
+              ${MobileApp.isStoreClosed ? '🔴 Store Paused' : '🟢 Open for Orders'}
+            </button>
+            <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant</div>
+          </div>
         </div>
 
         <!-- Commercial Sequence Header -->
@@ -1987,7 +2123,10 @@ const MobileApp = {
                   <div style="font-size: 0.72rem; color: #64748B;">
                     Stock: <strong style="color: ${p.stock_qty > 0 ? '#1E293B' : 'red'}; font-size: 0.82rem;">${p.stock_qty}</strong>
                   </div>
-                  <div style="display: flex; gap: 4px;">
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <button onclick="MobileApp.toggleProductQuickStock('${p.id}', ${p.stock_qty > 0 ? 0 : 10})" class="btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; cursor: pointer; background: ${p.stock_qty > 0 ? '#DCFCE7' : '#FEF2F2'}; color: ${p.stock_qty > 0 ? '#15803D' : '#DC2626'}; border: 1px solid ${p.stock_qty > 0 ? '#86EFAC' : '#FCA5A5'};" title="Toggle active/out-of-stock">
+                      ${p.stock_qty > 0 ? 'Pause ✕' : 'Resume ✓'}
+                    </button>
                     <button onclick="MobileApp.quickUpdateStock('${p.id}', Math.max(0, ${p.stock_qty} - 1))" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;" title="Reduce 1 stock">-1</button>
                     <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 5)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800;" title="Add 5 stock">+5</button>
                     <button onclick="MobileApp.showVendorEditProductModal('${p.id}')" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">✏️ Edit</button>
@@ -2760,8 +2899,10 @@ const MobileApp = {
         <!-- Rider Earnings Card — Darklight Blood / Maroon Theme -->
         <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">🛵 Completed Trip Earnings</span>
-            <span style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); color: #FFF; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 800;">${rider?.rider_type === 'INTERNAL' ? '🏢 Internal Fleet' : '🤝 Partner (Commission)'}</span>
+            <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">🛵 Trip Earnings (80% Commission)</span>
+            <button onclick="MobileApp.toggleRiderOnlineStatus()" style="background: ${MobileApp.isRiderOnline ? '#22C55E' : '#94A3B8'}; color: #FFF; border: none; padding: 3px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              ${MobileApp.isRiderOnline ? '🟢 Online & Ready' : '⚪ Off-Duty'}
+            </button>
           </div>
           <div style="font-size: 1.65rem; font-weight: 900; margin: 4px 0 8px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
             ₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
@@ -2783,7 +2924,19 @@ const MobileApp = {
             </div>
             
             <div style="font-size: 0.75rem; margin-bottom: 4px;">🏪 Pickup: <strong>${activeOrder.store_name}</strong> (${activeOrder.store_address})</div>
-            <div style="font-size: 0.75rem; margin-bottom: 12px;">📍 Dropoff: <strong>${activeOrder.delivery_address}</strong></div>
+            <div style="font-size: 0.75rem; margin-bottom: 8px;">📍 Dropoff: <strong>${activeOrder.delivery_address}</strong></div>
+
+            <!-- 1-Tap Google Maps Navigation & Customer Contact -->
+            <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activeOrder.delivery_address)}" target="_blank" rel="noopener" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; background: #EFF6FF; border: 1px solid #93C5FD; color: #1D4ED8; padding: 8px 10px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; text-decoration: none;">
+                🗺️ Google Maps Navigation
+              </a>
+              ${activeOrder.customer_phone ? `
+                <a href="tel:${activeOrder.customer_phone}" style="display: flex; align-items: center; justify-content: center; gap: 4px; background: #ECFDF5; border: 1px solid #A7F3D0; color: #059669; padding: 8px 10px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; text-decoration: none;">
+                  📞 Call
+                </a>
+              ` : ''}
+            </div>
 
             <!-- Mission Action Steps -->
             ${activeOrder.status === 'ASSIGNED' ? `
@@ -2918,7 +3071,7 @@ const MobileApp = {
                 <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
                 <div style="font-size: 0.68rem; color: #166534; font-weight: 600;">${accName}</div>
               </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Virtual Account Copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('✅ Account Copied: ${accNum} (${bankName})! Paste in your bank app.', 'success')" style="background: #166534; color: #FFF; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
                 📋 Copy
               </button>
             </div>
@@ -2928,9 +3081,17 @@ const MobileApp = {
 
           <!-- 2. FLUTTERWAVE GATEWAY -->
           <form onsubmit="MobileApp.executeTopUp(event)">
-            <div class="rp-form-group" style="margin-bottom: 10px;">
+            <div class="rp-form-group" style="margin-bottom: 8px;">
               <label class="rp-label" style="font-size: 0.75rem;">Top Up Amount (NGN)</label>
               <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" required style="border-radius: 10px;">
+              
+              <!-- Quick Preset Amount Chips -->
+              <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                <button type="button" onclick="document.getElementById('topup-amount').value=1000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦1,000</button>
+                <button type="button" onclick="document.getElementById('topup-amount').value=2000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦2,000</button>
+                <button type="button" onclick="document.getElementById('topup-amount').value=5000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦5,000</button>
+                <button type="button" onclick="document.getElementById('topup-amount').value=10000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦10,000</button>
+              </div>
             </div>
             <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800; font-size: 0.88rem;">
               Pay with Flutterwave (Card / USSD) 💳

@@ -47,12 +47,14 @@ const AdminPortal = {
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(127,29,29,0.06), transparent); border-left: 3px solid #B91C1C; padding-left: 8px;">🛵 Dispatcher</div>
           <div class="admin-nav-item ${this.currentTab === 'dispatcher' ? 'active' : ''}" onclick="AdminPortal.switchTab('dispatcher')">
             <span class="admin-nav-icon">⚡</span> <span>Live Order Queue</span>
+            <span class="badge" style="background:#EF4444;color:#FFF;padding:1px 7px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">${(this.orders && this.orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length) || '3'}</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'dispatch' ? 'active' : ''}" onclick="AdminPortal.switchTab('dispatch')">
             <span class="admin-nav-icon">📡</span> <span>Fleet Radar & GPS Map</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'waybills' ? 'active' : ''}" onclick="AdminPortal.switchTab('waybills')">
             <span class="admin-nav-icon">📦</span> <span>Waybill & Custom Dispatch</span>
+            <span class="badge" style="background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);padding:1px 6px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Active</span>
           </div>
 
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(37,99,235,0.06), transparent); border-left: 3px solid #2563EB; padding-left: 8px;">⚙️ Operations Manager</div>
@@ -80,6 +82,7 @@ const AdminPortal = {
           </div>
           <div class="admin-nav-item ${this.currentTab === 'vendor-requests' ? 'active' : ''}" onclick="AdminPortal.switchTab('vendor-requests')">
             <span class="admin-nav-icon">📋</span> <span>Partner Applications</span>
+            <span class="badge" style="background:rgba(124,58,237,0.15);color:#A78BFA;border:1px solid rgba(124,58,237,0.3);padding:1px 6px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Review</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'categories' ? 'active' : ''}" onclick="AdminPortal.switchTab('categories')">
             <span class="admin-nav-icon">🏷️</span> <span>Categories Master</span>
@@ -91,6 +94,7 @@ const AdminPortal = {
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(217,119,6,0.06), transparent); border-left: 3px solid #D97706; padding-left: 8px;">💬 Customer Support</div>
           <div class="admin-nav-item ${this.currentTab === 'customer-support' ? 'active' : ''}" onclick="AdminPortal.switchTab('customer-support')">
             <span class="admin-nav-icon">🎫</span> <span>Support Ticket Desk</span>
+            <span class="badge" style="background:#F59E0B;color:#000;padding:1px 7px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Live</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'support' ? 'active' : ''}" onclick="AdminPortal.switchTab('support')">
             <span class="admin-nav-icon">💬</span> <span>Old Help Desk</span>
