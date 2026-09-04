@@ -141,6 +141,16 @@ def startup_event():
     init_db()
     seed_database()
 
+@app.get("/api/health")
+def health_check():
+    """Render deployment health check endpoint. Returns service status and version."""
+    return {
+        "status": "healthy",
+        "service": "RushPoint Logistics API",
+        "version": "2.0.0",
+        "environment": os.getenv("FLW_ENV", "LIVE")
+    }
+
 @app.get("/")
 def serve_landing():
     landing_path = os.path.join(static_dir, "landing.html")

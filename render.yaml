@@ -2,9 +2,41 @@ services:
   - type: web
     name: rushpoint
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    region: oregon
+    plan: starter
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --log-level info
+    healthCheckPath: /api/health
+    autoDeploy: true
+
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.0
-    autoDeploy: true
+        value: "3.12.0"
+      - key: PORT
+        value: "8000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: JWT_SECRET
+        sync: false
+      - key: FLUTTERWAVE_CLIENT_ID
+        sync: false
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_ENCRYPTION_KEY
+        sync: false
+      - key: FLUTTERWAVE_SECRET_HASH
+        sync: false
+      - key: FLUTTERWAVE_MODE
+        value: "LIVE"
+      - key: FLUTTERWAVE_WEBHOOK_URL
+        value: "https://rushpoint2.onrender.com/api/finance/webhook/flutterwave"
+      - key: FLW_CLIENT_ID
+        sync: false
+      - key: FLW_SECRET_KEY
+        sync: false
+      - key: FLW_ENCRYPTION_KEY
+        sync: false
+      - key: FLW_SECRET_HASH
+        sync: false
+      - key: FLW_ENV
+        value: "LIVE"

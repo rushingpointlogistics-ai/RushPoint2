@@ -550,11 +550,16 @@ async def flutterwave_webhook_endpoint(request: Request):
             meta = data.get("meta", {})
             user_id = meta.get("user_id")
 
-            # Try finding user by email if not in meta
+            # Try finding user by email or phone if not in meta
             if not user_id:
-                cust_email = data.get("customer", {}).get("email")
+                cust_email = (data.get("customer", {}).get("email") or "").strip().lower()
+                cust_phone = (data.get("customer", {}).get("phone_number") or "").strip()
                 if cust_email:
-                    user_row = conn.execute("SELECT id FROM users WHERE email = ?", (cust_email,)).fetchone()
+                    user_row = conn.execute("SELECT id FROM users WHERE LOWER(email) = ?", (cust_email,)).fetchone()
+                    if user_row:
+                        user_id = user_row["id"]
+                if not user_id and cust_phone:
+                    user_row = conn.execute("SELECT id FROM users WHERE phone = ?", (cust_phone,)).fetchone()
                     if user_row:
                         user_id = user_row["id"]
 

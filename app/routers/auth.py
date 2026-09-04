@@ -228,6 +228,7 @@ def unified_login(req: LoginRequest):
     return {
         "success": True,
         "token": token,
+        "access_token": token,
         "user": {
             "id": user["id"],
             "user_ref": user["user_ref"],
