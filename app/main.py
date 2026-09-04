@@ -151,6 +151,12 @@ def health_check():
         "environment": os.getenv("FLW_ENV", "LIVE")
     }
 
+@app.post("/webhooks/flutterwave")
+async def flutterwave_webhook_alias(request: Request):
+    """Direct webhook alias for Flutterwave dashboard notifications."""
+    from app.routers.finance import flutterwave_webhook_endpoint
+    return await flutterwave_webhook_endpoint(request)
+
 @app.get("/")
 def serve_landing():
     landing_path = os.path.join(static_dir, "landing.html")
