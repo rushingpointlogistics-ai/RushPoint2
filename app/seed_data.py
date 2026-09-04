@@ -34,7 +34,7 @@ def seed_database():
         ("flutterwave_public_key", "FLWPUBK_TEST-ce13bd3d08af496e8bf937ec62f69819-X", "Flutterwave Public Key"),
         ("flutterwave_secret_key", "FLWSECK_TEST-Tr7wTwOvbk8vlbJOBVd4m37dYBqijPkJ-X", "Flutterwave Secret Key"),
         ("flutterwave_encryption_key", "yr8VlYO/iNhS/Kgd5t3MSlvJE7o6H5AbZr97vc6hFCg=", "Flutterwave Encryption Key"),
-        ("flutterwave_secret_hash", "Atajrajah@123", "Flutterwave Webhook Verification Secret Hash"),
+        ("flutterwave_secret_hash", "Atajrajah@123456789123456789123456789123456789", "Flutterwave Webhook Verification Secret Hash"),
         ("flutterwave_webhook_url", "https://rushpoint2.onrender.com/webhooks/flutterwave", "Configured Flutterwave Webhook Endpoint URL"),
         ("flutterwave_mode", "LIVE", "Active payment gateway operating mode (LIVE/SANDBOX)")
     ]

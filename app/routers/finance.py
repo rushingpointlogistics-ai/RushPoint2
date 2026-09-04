@@ -360,7 +360,7 @@ def make_financial_adjustment(payload: dict, current_user: dict = Depends(requir
 FLW_DEFAULT_SECRET = "Tr7wTwOvbk8vlbJOBVd4m37dYBqijPkJ"
 FLW_DEFAULT_CLIENT_ID = "ce13bd3d-08af-496e-8bf9-37ec62f69819"
 FLW_DEFAULT_ENC_KEY = "yr8VlYO/iNhS/Kgd5t3MSlvJE7o6H5AbZr97vc6hFCg="
-FLW_DEFAULT_HASH = "Atajrajah@123"
+FLW_DEFAULT_HASH = "Atajrajah@123456789123456789123456789123456789"
 
 def get_flw_credentials():
     conn = get_db_connection()
@@ -526,7 +526,14 @@ async def flutterwave_webhook_endpoint(request: Request):
 
     # Validate secret hash from request headers
     received_hash = request.headers.get("verif-hash") or request.headers.get("verif_hash") or request.headers.get("Verif-Hash")
-    valid_hashes = {expected_hash, expected_hash.replace("@", "") if expected_hash else None, "Atajrajah@123", "Atajrajah123"}
+    valid_hashes = {
+        expected_hash,
+        expected_hash.replace("@", "") if expected_hash else None,
+        "Atajrajah@123456789123456789123456789123456789",
+        "Atajrajah123456789123456789123456789123456789",
+        "Atajrajah@123",
+        "Atajrajah123"
+    }
     valid_hashes.discard(None)
 
     if expected_hash and received_hash and (received_hash not in valid_hashes):
