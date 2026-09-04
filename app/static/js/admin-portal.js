@@ -10,6 +10,7 @@ const AdminPortal = {
 
   async init() {
     this.render();
+    this.startAdminOrderPolling();
   },
 
   async render() {
@@ -3112,6 +3113,7 @@ const AdminPortal = {
                       <td><code style="background:var(--blood-tint);color:var(--blood-primary);padding:2px 6px;border-radius:4px;font-weight:900;">${o.pod_otp || 'N/A'}</code></td>
                       <td style="display:flex;gap:4px;flex-wrap:wrap;">
                         <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm">⚡ Assign</button>
+                        <button onclick="AdminPortal.showSimDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF;">📱 SIM</button>
                         <button onclick="AdminPortal.showRefundModal('${o.id}', '${o.order_ref}', ${o.total_amount})" class="btn-danger btn-sm">💸 Refund</button>
                       </td>
                     </tr>
@@ -3152,6 +3154,7 @@ const AdminPortal = {
                       <td style="display:flex;gap:4px;flex-wrap:wrap;">
                         <button onclick="AdminPortal.viewOrderTimeline('${o.id}')" class="btn-secondary btn-sm">📋 Timeline</button>
                         <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm">🔄 Reassign</button>
+                        ${o.rider_phone ? `<button onclick="AdminPortal.showSimDispatchModal('${o.id}','${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF;border-color:#8B5CF6;">📟 SIM</button>` : ''}
                         <button onclick="AdminPortal.adminConfirmDelivery('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm" style="background:#059669;font-size:0.65rem;padding:4px 8px;" title="Confirm delivery on behalf of rider phone call — releases commission">
                           📞 Confirm Delivery
                         </button>
@@ -4239,6 +4242,220 @@ const AdminPortal = {
       API.showToast(res.message || "Pricing and limits saved successfully!", "success");
       this.render();
     } catch (err) {}
+  },
+
+  async showSimDispatchModal(orderId, orderRef) {
+    try {
+      const res = await API.get(`/api/orders/${orderId}`, { silent: true });
+      const o = res?.order || {};
+      const riderPhone = o.rider_phone || '';
+      const riderName = o.rider_name || o.rider_ref || 'Rider';
+      const storeAddress = o.store_address || o.store_name || 'Vendor Store';
+      const dropoffAddress = o.delivery_address || '';
+      const customerPhone = o.customer_phone || '';
+      this.showSimDispatchPanel(riderPhone, riderName, o.rider_id || '', orderRef, orderId, storeAddress, dropoffAddress, customerPhone);
+    } catch (e) {
+      API.showToast('Could not load order details for SIM dispatch.', 'error');
+    }
+  },
+
+  // ==========================================
+  // 🚨 ADMIN REAL-TIME AUDIO CHIME & BANNER ALERT SYSTEM (100% FREE)
+  // Plays a dispatcher chime using Web Audio API + shows a red banner
+  // whenever a new order arrives in the Live Order Queue.
+  // ==========================================
+  _adminAudioCtx: null,
+  _adminLastOrderCount: null,
+  _adminPollInterval: null,
+
+  playAdminOrderChime() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      // Descending 3-note dispatcher chime (G5→E5→C5)
+      const notes = [784, 659, 523];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.22);
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.22);
+        gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + i * 0.22 + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.22);
+        osc.stop(ctx.currentTime + i * 0.22 + 0.4);
+      });
+      // Auto-close ctx after last note
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1200);
+    } catch (e) {}
+  },
+
+  showAdminNewOrderBanner(orderCount) {
+    // Remove any existing banner first
+    const existing = document.getElementById('admin-new-order-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'admin-new-order-banner';
+    banner.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 99998;
+      background: linear-gradient(90deg, #7F1D1D, #B91C1C, #EF4444);
+      color: #FFF; padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: inherit; box-shadow: 0 4px 20px rgba(185,28,28,0.5);
+      animation: rp-slide-down 0.35s ease;
+    `;
+    banner.innerHTML = `
+      <style>
+        @keyframes rp-slide-down { from { transform: translateY(-100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+        @keyframes rp-blink { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+        .rp-admin-blink { animation: rp-blink 0.8s ease-in-out infinite; }
+      </style>
+      <div style="display:flex; align-items:center; gap: 10px;">
+        <span class="rp-admin-blink" style="font-size: 1.4rem;">🚨</span>
+        <div>
+          <div style="font-weight: 900; font-size: 0.92rem;">
+            ${orderCount} NEW ORDER${orderCount > 1 ? 'S' : ''} WAITING FOR DISPATCH!
+          </div>
+          <div style="font-size: 0.7rem; opacity: 0.88;">
+            Go to Live Order Queue → Assign a rider immediately
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="AdminPortal.switchTab('dispatcher')" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:#FFF; padding: 5px 12px; border-radius:8px; font-weight:800; font-size:0.78rem; cursor:pointer;">
+          ⚡ Open Queue
+        </button>
+        <button onclick="this.closest('#admin-new-order-banner').remove()" style="background:none; border:none; color:#FFF; font-size:1.2rem; cursor:pointer; opacity:0.7;">✕</button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+    // Auto-dismiss after 30 seconds
+    setTimeout(() => { try { banner.remove(); } catch (e) {} }, 30000);
+  },
+
+  startAdminOrderPolling() {
+    if (this._adminPollInterval) return;
+    this._adminPollInterval = setInterval(async () => {
+      try {
+        const user = (typeof API !== 'undefined' && API.getUser()) || null;
+        if (!user || !['ADMIN', 'STAFF'].includes(user.account_type)) {
+          this.stopAdminOrderPolling();
+          return;
+        }
+        const res = await API.get('/api/orders/', { silent: true });
+        const orders = res?.orders || [];
+        const pendingCount = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status)).length;
+
+        if (this._adminLastOrderCount === null) {
+          // First poll — just set baseline silently
+          this._adminLastOrderCount = pendingCount;
+          return;
+        }
+
+        if (pendingCount > this._adminLastOrderCount) {
+          // New order(s) arrived!
+          const diff = pendingCount - this._adminLastOrderCount;
+          this.playAdminOrderChime();
+          this.showAdminNewOrderBanner(pendingCount);
+          this._adminLastOrderCount = pendingCount;
+        } else {
+          this._adminLastOrderCount = pendingCount;
+        }
+      } catch (e) {}
+    }, 12000); // poll every 12 seconds
+  },
+
+  stopAdminOrderPolling() {
+    if (this._adminPollInterval) {
+      clearInterval(this._adminPollInterval);
+      this._adminPollInterval = null;
+    }
+  },
+
+  // ==========================================
+  // 📟 1-TAP SIM CARD DISPATCH — SMS + CALL for Feature-Phone (Nokia/itel) Riders
+  // Opens native phone app / SMS composer pre-filled with mission details.
+  // ₦0 cost to admin — uses GSM tel: and sms: URI schemes.
+  // ==========================================
+  simSmsDispatch(riderPhone, riderName, orderRef, storeAddress, dropoffAddress, customerPhone, commissionNaira) {
+    if (!riderPhone) {
+      alert('No phone number registered for this rider.');
+      return;
+    }
+    const mission = [
+      `RUSHPOINT DISPATCH`,
+      `Order: ${orderRef}`,
+      `Pickup: ${storeAddress}`,
+      `Dropoff: ${dropoffAddress}`,
+      `Customer: ${customerPhone}`,
+      `Commission: N${commissionNaira}`,
+      `Reply: ACCEPT or DECLINE`,
+    ].join('\n');
+    const encoded = encodeURIComponent(mission);
+    // sms: URI — opens native SMS app with rider's number and pre-filled message
+    window.open(`sms:${riderPhone}?body=${encoded}`, '_self');
+  },
+
+  simCallDispatch(riderPhone, riderName) {
+    if (!riderPhone) {
+      alert('No phone number registered for this rider.');
+      return;
+    }
+    // tel: URI — initiates a native GSM call on the admin's device
+    window.open(`tel:${riderPhone}`, '_self');
+  },
+
+  showSimDispatchPanel(riderPhone, riderName, riderId, orderRef, orderId, storeAddress, dropoffAddress, customerPhone) {
+    const existingPanel = document.getElementById('rp-sim-dispatch-panel');
+    if (existingPanel) existingPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'rp-sim-dispatch-panel';
+    panel.className = 'modal-backdrop rp-modal-overlay';
+    panel.innerHTML = `
+      <div class="modal-dialog" style="max-width:480px; border-radius:18px;">
+        <div class="modal-header">
+          <div>
+            <h3 style="font-size:1rem; font-weight:900; color:#7F1D1D;">📟 SIM Card Dispatch — Feature-Phone Rider</h3>
+            <div style="font-size:0.7rem; color:#64748B;">Rider: <strong>${riderName}</strong> (${riderPhone}) • Order: <strong>${orderRef}</strong></div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;">✕</button>
+        </div>
+
+        <div style="background:#FFF5F5; border:1px solid #FECACA; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:0.74rem; color:#7F1D1D;">
+          <strong>📍 Pickup:</strong> ${storeAddress || 'Vendor Store'}<br>
+          <strong>📦 Dropoff:</strong> ${dropoffAddress || 'Customer Address'}<br>
+          <strong>📞 Customer:</strong> ${customerPhone || 'N/A'}
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+          <!-- 1-Tap SMS -->
+          <button onclick="AdminPortal.simSmsDispatch('${riderPhone}', '${riderName}', '${orderRef}', '${(storeAddress||'').replace(/'/g,'')}', '${(dropoffAddress||'').replace(/'/g,'')}', '${customerPhone||''}', '800'); this.closest('.modal-backdrop').remove();"
+            style="background: linear-gradient(135deg, #1E40AF, #2563EB); color:#FFF; border:none; border-radius:12px; padding:14px; cursor:pointer; text-align:center; font-weight:800; font-size:0.8rem;">
+            📩 Send SMS Mission<br>
+            <span style="font-size:0.65rem; font-weight:500; opacity:0.85;">Opens native SMS — ₦0 from app</span>
+          </button>
+          <!-- 1-Tap Call -->
+          <button onclick="AdminPortal.simCallDispatch('${riderPhone}', '${riderName}');"
+            style="background: linear-gradient(135deg, #065F46, #059669); color:#FFF; border:none; border-radius:12px; padding:14px; cursor:pointer; text-align:center; font-weight:800; font-size:0.8rem;">
+            📞 Call Rider Directly<br>
+            <span style="font-size:0.65rem; font-weight:500; opacity:0.85;">Opens native phone dialer</span>
+          </button>
+        </div>
+
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px; font-size:0.7rem; color:#166534; line-height:1.6;">
+          <strong>💡 How it works:</strong><br>
+          • Tap <em>Send SMS Mission</em> — your phone opens the SMS app with the rider's number and full dispatch details pre-filled. Tap Send.<br>
+          • The rider's Nokia / itel button phone receives the SMS instantly with pickup, dropoff, and commission info.<br>
+          • Tap <em>Call Rider Directly</em> to verbally confirm the mission over GSM voice call.
+        </div>
+      </div>
+    `;
+    document.body.appendChild(panel);
   },
 
 };

@@ -2001,6 +2001,9 @@ const MobileApp = {
     const inTransitOrders = orders.filter(o => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'].includes(o.status));
     const activeOrders = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status));
 
+    // Start background polling so the phone rings on new orders (zero cost — browser only)
+    this.startVendorOrderPolling();
+
     container.innerHTML = `
       <div class="mobile-app-shell">
         <!-- Moniepoint Business Header (Dark-Light Blood Theme) -->
@@ -3565,6 +3568,247 @@ const MobileApp = {
       reader.readAsDataURL(file);
     } catch (err) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#DC2626;">❌ Image processing failed</span>';
+    }
+  },
+
+  // ==========================================
+  // 📞 WEB AUDIO TELEPHONE RINGING SYSTEM (100% FREE — No Telecom Charges)
+  // Uses OscillatorNode dual-tone (440Hz + 480Hz) — authentic telephone ring.
+  // ==========================================
+  _ringAudioCtx: null,
+  _ringOsc1: null,
+  _ringOsc2: null,
+  _ringGain: null,
+  _ringInterval: null,
+  _knownNewOrderIds: new Set(),
+  _vendorPollInterval: null,
+
+  playTelephoneRingtone() {
+    try {
+      this.stopTelephoneRingtone();
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      this._ringAudioCtx = ctx;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.connect(ctx.destination);
+      this._ringGain = gain;
+
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(440, ctx.currentTime);
+      osc1.connect(gain);
+      osc1.start();
+      this._ringOsc1 = osc1;
+
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(480, ctx.currentTime);
+      osc2.connect(gain);
+      osc2.start();
+      this._ringOsc2 = osc2;
+
+      // Ring cadence: 2s ring, 4s silence (standard telephone ring pattern)
+      let ringing = false;
+      const cadence = () => {
+        if (!this._ringGain) return;
+        ringing = !ringing;
+        this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+        if (ringing) {
+          this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+          // Vibrate device during ring burst
+          if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        } else {
+          this._ringGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+        }
+      };
+      cadence(); // start immediately
+      this._ringInterval = setInterval(cadence, ringing ? 2000 : 4000);
+      // Simpler alternating: ring 2s ON, 3s OFF
+      clearInterval(this._ringInterval);
+      let isOn = true;
+      this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+      if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+      this._ringInterval = setInterval(() => {
+        if (!this._ringGain) return;
+        isOn = !isOn;
+        if (isOn) {
+          this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+          this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+          if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        } else {
+          this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+          this._ringGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+        }
+      }, 2000);
+    } catch (e) {}
+  },
+
+  stopTelephoneRingtone() {
+    try {
+      if (this._ringInterval) { clearInterval(this._ringInterval); this._ringInterval = null; }
+      if (this._ringOsc1) { try { this._ringOsc1.stop(); } catch (e) {} this._ringOsc1 = null; }
+      if (this._ringOsc2) { try { this._ringOsc2.stop(); } catch (e) {} this._ringOsc2 = null; }
+      if (this._ringAudioCtx) { try { this._ringAudioCtx.close(); } catch (e) {} this._ringAudioCtx = null; }
+      this._ringGain = null;
+      if (navigator.vibrate) navigator.vibrate(0);
+    } catch (e) {}
+  },
+
+  // ==========================================
+  // 📲 FULL-SCREEN INCOMING ORDER CALL MODAL FOR VENDORS
+  // Triggered automatically when a NEW order arrives.
+  // ==========================================
+  showIncomingOrderCall(order) {
+    // Don't show duplicate modals
+    if (document.getElementById('vendor-incoming-call-modal')) return;
+
+    this.playTelephoneRingtone();
+
+    const items = (order.items || []).map(i => `${i.qty || 1}× ${i.product_name || 'Item'}`).join(', ');
+
+    const modal = document.createElement('div');
+    modal.id = 'vendor-incoming-call-modal';
+    modal.style.cssText = `
+      position: fixed; inset: 0; z-index: 99999;
+      background: linear-gradient(135deg, #0F172A 0%, #450A0A 60%, #7F1D1D 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      animation: rp-fadein 0.3s ease;
+    `;
+    modal.innerHTML = `
+      <style>
+        @keyframes rp-pulse-ring {
+          0% { transform: scale(0.9); opacity: 0.8; }
+          50% { transform: scale(1.15); opacity: 0.3; }
+          100% { transform: scale(0.9); opacity: 0.8; }
+        }
+        @keyframes rp-fadein { from { opacity:0; } to { opacity:1; } }
+        .rp-call-pulse {
+          position: absolute; width: 140px; height: 140px; border-radius: 50%;
+          background: rgba(185,28,28,0.35);
+          animation: rp-pulse-ring 1.4s ease-in-out infinite;
+        }
+      </style>
+
+      <div style="text-align:center; color:#FFF; padding: 0 24px; max-width: 360px; width:100%;">
+
+        <!-- Caller ID Header -->
+        <div style="font-size: 0.78rem; font-weight: 700; color: #FCA5A5; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;">
+          📦 INCOMING ORDER
+        </div>
+
+        <!-- Pulsing Ring Avatar -->
+        <div style="position:relative; display:flex; align-items:center; justify-content:center; height:160px; margin-bottom: 20px;">
+          <div class="rp-call-pulse" style="animation-delay: 0s;"></div>
+          <div class="rp-call-pulse" style="animation-delay: 0.45s; width:120px; height:120px;"></div>
+          <div style="position:relative; z-index:2; width: 96px; height: 96px; border-radius: 50%; background: #B91C1C; border: 3px solid rgba(255,255,255,0.25); display:flex; align-items:center; justify-content:center; font-size: 2.5rem;">
+            🏪
+          </div>
+        </div>
+
+        <!-- Order Info -->
+        <div style="font-size: 1.4rem; font-weight: 900; margin-bottom: 4px;">
+          Order ${order.order_ref || '#NEW'}
+        </div>
+        <div style="font-size: 0.88rem; color: #FCA5A5; margin-bottom: 6px; font-weight: 700;">
+          Customer: ${order.customer_name || 'Customer'}
+        </div>
+        <div style="font-size: 0.78rem; color: #FEE2E2; margin-bottom: 4px;">
+          ${items || 'New order received'}
+        </div>
+        <div style="font-size: 1.1rem; font-weight: 900; color: #FCD34D; margin-bottom: 24px;">
+          ₦${(order.total_amount || 0).toLocaleString()}
+        </div>
+
+        <!-- Accept / Decline Buttons -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <button onclick="MobileApp.dismissIncomingCall(false, '${order.id}')"
+            style="background: #DC2626; border: none; border-radius: 50%; width: 72px; height: 72px; font-size: 1.6rem; cursor: pointer; color: #FFF; margin: 0 auto; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 0 4px rgba(220,38,38,0.3);"
+            title="Decline Order">
+            📵
+          </button>
+          <button onclick="MobileApp.dismissIncomingCall(true, '${order.id}')"
+            style="background: #059669; border: none; border-radius: 50%; width: 72px; height: 72px; font-size: 1.6rem; cursor: pointer; color: #FFF; margin: 0 auto; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 0 4px rgba(5,150,105,0.3);"
+            title="Accept & Prepare Order">
+            ✅
+          </button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <div style="text-align:center; font-size:0.65rem; color:#FCA5A5; font-weight:700;">DECLINE ORDER</div>
+          <div style="text-align:center; font-size:0.65rem; color:#6EE7B7; font-weight:700;">ACCEPT & PREPARE</div>
+        </div>
+
+        <div style="font-size:0.62rem; color:rgba(255,255,255,0.45); margin-top:20px;">
+          RushPoint Dispatch • New Order Alert
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async dismissIncomingCall(accepted, orderId) {
+    this.stopTelephoneRingtone();
+    const modal = document.getElementById('vendor-incoming-call-modal');
+    if (modal) modal.remove();
+
+    if (accepted && orderId) {
+      try {
+        const res = await API.post(`/api/orders/${orderId}/vendor-confirm`);
+        API.showToast('✅ Order Accepted! Preparing now...', 'success');
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.render();
+      } catch (e) {
+        API.showToast('Could not confirm order. Please confirm manually.', 'error');
+        this.render();
+      }
+    } else {
+      API.showToast('Order declined. Customer will be notified.', 'info');
+    }
+  },
+
+  // ==========================================
+  // 🔔 VENDOR ORDER POLLING — Auto-detects new orders and triggers ringtone
+  // Polls every 15 seconds; zero cost (uses existing /api/orders/ endpoint)
+  // ==========================================
+  startVendorOrderPolling() {
+    if (this._vendorPollInterval) return; // already running
+    this._vendorPollInterval = setInterval(async () => {
+      try {
+        const user = API.getUser();
+        if (!user || user.account_type !== 'VENDOR') {
+          this.stopVendorOrderPolling();
+          return;
+        }
+        const res = await API.get('/api/orders/', { silent: true });
+        const orders = res?.orders || [];
+        const newOrders = orders.filter(o => o.status === 'NEW');
+
+        // Detect genuinely new orders (not seen before in this session)
+        const freshOrders = newOrders.filter(o => !this._knownNewOrderIds.has(String(o.id)));
+
+        // Update known IDs (include all NEW + older statuses so we don't re-ring)
+        orders.forEach(o => {
+          if (o.status !== 'NEW') this._knownNewOrderIds.add(String(o.id));
+        });
+
+        if (freshOrders.length > 0) {
+          // Update known set
+          freshOrders.forEach(o => this._knownNewOrderIds.add(String(o.id)));
+          // Show incoming call modal for the first new order
+          if (!document.getElementById('vendor-incoming-call-modal')) {
+            this.showIncomingOrderCall(freshOrders[0]);
+          }
+        }
+      } catch (e) {}
+    }, 15000); // check every 15 seconds
+  },
+
+  stopVendorOrderPolling() {
+    if (this._vendorPollInterval) {
+      clearInterval(this._vendorPollInterval);
+      this._vendorPollInterval = null;
     }
   },
 
