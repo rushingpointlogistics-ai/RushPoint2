@@ -306,3 +306,63 @@ def update_customer_call_setting(payload: dict, current_user: dict = Depends(req
     
     status_text = "ENABLED (Customers can call riders directly)" if enabled else "DISABLED (Strict Privacy: Customers contact Dispatch Support)"
     return {"success": True, "allow_customer_call_rider": enabled, "message": f"Customer-Courier Direct Calling is now {status_text}."}
+
+@router.post("/check-stale-assignments")
+def check_and_escalate_stale_assignments():
+    """
+    3-Minute Auto-Reassign Escalation:
+    Checks for orders in 'ASSIGNED' status for > 3 minutes (180 seconds)
+    where courier has not acknowledged or moved to 'PICKED_UP'.
+    Frees the unresponsive courier and automatically re-assigns to the next nearest courier.
+    """
+    conn = get_db_connection()
+    now_utc = datetime.now(timezone.utc)
+    now_iso = now_utc.isoformat()
+    
+    assigned_orders = conn.execute("SELECT id, order_ref, rider_id, updated_at FROM orders WHERE status = 'ASSIGNED'").fetchall()
+    
+    escalated = []
+    for o in assigned_orders:
+        updated_at_str = o["updated_at"]
+        if not updated_at_str:
+            continue
+        try:
+            up_dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+            age_seconds = (now_utc - up_dt).total_seconds()
+        except Exception:
+            age_seconds = 0
+            
+        if age_seconds >= 180: # 3 minutes
+            stale_rider_id = o["rider_id"]
+            if stale_rider_id:
+                conn.execute("UPDATE riders SET operational_status = 'AVAILABLE', updated_at = ? WHERE id = ?", (now_iso, stale_rider_id))
+                
+            ord_row, is_heavy, req_v, scored_riders = compute_scored_riders(conn, o["id"])
+            next_riders = [r for r in scored_riders if r["rider_id"] != stale_rider_id and r["operational_status"] == "AVAILABLE"]
+            if not next_riders:
+                next_riders = [r for r in scored_riders if r["rider_id"] != stale_rider_id]
+                
+            if next_riders:
+                next_rider = next_riders[0]
+                success, msg = execute_rider_assignment(
+                    conn, o["id"], next_rider["rider_id"],
+                    "SYSTEM_ESCALATION", "Auto-Escalation Protocol",
+                    f"Previous courier did not accept/move within 3 minutes. Re-routed to next closest courier {next_rider['full_name']} ({next_rider['distance_km']} km away)."
+                )
+                if success:
+                    escalated.append({
+                        "order_ref": o["order_ref"],
+                        "previous_rider_id": stale_rider_id,
+                        "new_rider": next_rider["full_name"],
+                        "elapsed_seconds": int(age_seconds)
+                    })
+                    
+    conn.commit()
+    conn.close()
+    return {
+        "success": True,
+        "escalated_count": len(escalated),
+        "escalated_orders": escalated,
+        "message": f"Escalation complete: {len(escalated)} unresponsive assignments re-routed to next nearest couriers."
+    }
+

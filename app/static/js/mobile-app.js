@@ -1805,6 +1805,13 @@ const MobileApp = {
                     <div style="font-size: 0.64rem; color: #B91C1C; margin-top: 2px;">If items are missing or damaged, or if delivery is significantly delayed, your payment is refunded instantly into your wallet.</div>
                   </div>
                 </div>
+
+                <!-- WhatsApp Official Receipt & Tracking Share -->
+                <div style="margin-top: 10px;">
+                  <a href="${MobileApp.generateWhatsAppReceiptUrl(o)}" target="_blank" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border-radius: 10px; padding: 9px; font-size: 0.75rem; font-weight: 800; color: #059669; border-color: #A7F3D0; background: #ECFDF5; text-decoration: none;">
+                    📲 Save / Share Receipt on WhatsApp
+                  </a>
+                </div>
               </div>
             ` : `
               <!-- Rider & Admin View: Live GPS Radar Map + 1-Tap Google Maps Navigation -->
@@ -2100,9 +2107,14 @@ const MobileApp = {
               <div style="font-size: 0.65rem; opacity: 0.88; color: #FEE2E2;">🏪 ${vendor?.business_name || 'Store'} • 📍 ${store?.address || 'Katsina / Lagos'}</div>
             </div>
           </div>
-          <button onclick="MobileApp.showRoleSwitchModal()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
-            Switch
-          </button>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button onclick="MobileApp.testAndUnlockVendorAudio()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;" title="Test and prime device speaker so it rings loudly on orders">
+              🔔 Sound Test
+            </button>
+            <button onclick="MobileApp.showRoleSwitchModal()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
+              Switch
+            </button>
+          </div>
         </div>
 
         <div class="mobile-content-area">
@@ -2189,6 +2201,10 @@ const MobileApp = {
               </div>
               <div class="mobile-drawer-item ${this.vendorActiveTab === 'account' ? 'active' : ''}" onclick="MobileApp.toggleVendorDrawer(false); MobileApp.vendorActiveTab = 'account'; MobileApp.render();">
                 <span class="mobile-drawer-icon">🏦</span> <span>Bank Settlement Profile</span>
+              </div>
+              <div class="mobile-drawer-item" onclick="MobileApp.toggleVendorDrawer(false); MobileApp.showStoreQrFlyerModal();">
+                <span class="mobile-drawer-icon">🖨️</span> <span>Print Store QR Standee</span>
+                <span class="badge" style="background:#059669;color:#FFF;font-size:0.55rem;margin-left:auto;padding:1px 6px;">Flyer</span>
               </div>
 
               <div class="mobile-drawer-section-title">Security & Controls</div>
@@ -3890,6 +3906,73 @@ const MobileApp = {
       clearInterval(this._vendorPollInterval);
       this._vendorPollInterval = null;
     }
+  },
+
+  testAndUnlockVendorAudio() {
+    this.playTelephoneRingtone();
+    setTimeout(() => {
+      this.stopTelephoneRingtone();
+      API.showToast("🔊 Speaker & Vibration Active! Your device will ring loudly for incoming orders.", "success");
+    }, 1200);
+  },
+
+  generateWhatsAppReceiptUrl(o) {
+    const text = [
+      `🧾 *RUSHPOINT OFFICIAL ORDER RECEIPT*`,
+      `Order Ref: *#${o.order_ref}*`,
+      `🏪 Merchant: ${o.store_name}`,
+      `📦 Current Status: *${o.status}*`,
+      `💰 Total Amount: *₦${(o.total_amount || 0).toLocaleString()}*`,
+      `📍 Delivery Address: ${o.delivery_address}`,
+      `🔒 4-Digit Escrow PIN: *${o.pod_otp || 'Verified'}*`,
+      `🛡️ RushPoint 100% Escrow Protection Guaranteed`,
+      `View live order status: ${window.location.origin}/?track=${o.order_ref}`
+    ].join('\n');
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  },
+
+  async showStoreQrFlyerModal() {
+    let profile = null;
+    try {
+      profile = await API.get("/api/vendors/store/profile", { silent: true });
+    } catch(e) {}
+    const store = profile?.store || { store_name: "Vendor Stall", address: "Market Stall", id: "store-1" };
+    const targetUrl = window.location.origin + '/?store=' + (store.id || 'default');
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(targetUrl)}`;
+    
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px; text-align: center;">
+        <div class="modal-header">
+          <h3 style="font-size: 1rem; font-weight: 900; color: #7F1D1D;">🖨️ Storefront QR Standee</h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div id="rp-printable-standee" style="background: #FFF; border: 3px solid #7F1D1D; border-radius: 16px; padding: 20px; margin: 12px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.06);">
+          <div style="font-weight: 900; font-size: 1.2rem; color: #7F1D1D; text-transform: uppercase;">${store.store_name}</div>
+          <div style="font-size: 0.72rem; color: #64748B; margin-top: 2px;">📍 ${store.address || 'Katsina / Lagos'}</div>
+          
+          <div style="margin: 14px auto; width: 180px; height: 180px; padding: 8px; border: 2px dashed #B91C1C; border-radius: 12px; background: #FFF;">
+            <img src="${qrUrl}" alt="Store QR Code" style="width: 100%; height: 100%; object-fit: contain;">
+          </div>
+
+          <div style="font-weight: 900; font-size: 0.92rem; color: #1E293B;">📱 SCAN TO ORDER ON RUSHPOINT</div>
+          <div style="font-size: 0.68rem; color: #059669; font-weight: 800; margin-top: 4px;">⚡ Instant Delivery to Your Doorstep</div>
+          <div style="font-size: 0.6rem; color: #94A3B8; margin-top: 10px;">Powered by RushPoint Logistics • Safe 4-Way Escrow</div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button onclick="window.print()" class="btn-primary" style="flex: 1; justify-content: center; padding: 10px; border-radius: 10px; background: #7F1D1D; font-weight: 800;">
+            🖨️ Print Standee Flyer
+          </button>
+          <button onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="padding: 10px 14px; border-radius: 10px;">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
   },
 
 };

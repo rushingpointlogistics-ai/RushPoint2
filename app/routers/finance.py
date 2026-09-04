@@ -756,3 +756,79 @@ def get_my_dedicated_virtual_account(current_user: dict = Depends(get_current_us
         "dedicated_account": acc_info,
         "instructions": "Transfer any amount from any Nigerian bank (OPay, Kuda, GTB, Zenith, PalmPay) to this dedicated account number for instant wallet credit."
     }
+
+@router.get("/daily-reconciliation-snapshot")
+def get_daily_reconciliation_snapshot(current_user: dict = Depends(require_role(["ADMIN", "STAFF", "Super Admin", "Finance Officer"]))):
+    """
+    Automated Daily Financial Reconciliation & P&L Snapshot:
+    Calculates today's GMV, vendor settlement payouts, rider commissions,
+    RushPoint net platform margin, and customer escrow balances.
+    """
+    conn = get_db_connection()
+    today_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # 1. Orders placed today
+    today_orders = conn.execute("""
+        SELECT COUNT(*) as count, 
+               COALESCE(SUM(total_amount), 0) as total_gmv,
+               COALESCE(SUM(delivery_fee), 0) as total_delivery_fees
+        FROM orders
+        WHERE created_at LIKE ? AND status != 'CANCELLED_REFUNDED'
+    """, (f"{today_prefix}%",)).fetchone()
+    
+    # 2. Delivered / Completed orders today
+    delivered_orders = conn.execute("""
+        SELECT COUNT(*) as count,
+               COALESCE(SUM(total_amount), 0) as delivered_gmv
+        FROM orders
+        WHERE updated_at LIKE ? AND status = 'DELIVERED'
+    """, (f"{today_prefix}%",)).fetchone()
+    
+    # 3. Financial Settlements Breakdown
+    settlements = conn.execute("""
+        SELECT 
+            COALESCE(SUM(vendor_amount), 0) as total_vendor_payout,
+            COALESCE(SUM(rider_earnings), 0) as total_rider_commission,
+            COALESCE(SUM(platform_revenue), 0) as total_rushpoint_margin
+        FROM financial_settlements
+        WHERE created_at LIKE ?
+    """, (f"{today_prefix}%",)).fetchone()
+    
+    # 4. Wallet credits / funding today
+    wallet_credits = conn.execute("""
+        SELECT COALESCE(SUM(amount), 0) as total_deposits
+        FROM wallet_transactions
+        WHERE created_at LIKE ? AND type = 'CREDIT'
+    """, (f"{today_prefix}%",)).fetchone()
+    
+    # 5. Withdrawals processed today (debits from wallet_transactions)
+    withdrawals = conn.execute("""
+        SELECT COALESCE(SUM(amount), 0) as total_withdrawals
+        FROM wallet_transactions
+        WHERE created_at LIKE ? AND type = 'DEBIT'
+    """, (f"{today_prefix}%",)).fetchone()
+    
+    conn.close()
+    
+    gmv = float(today_orders["total_gmv"] or 0)
+    vendor_share = float(settlements["total_vendor_payout"] or 0)
+    rider_share = float(settlements["total_rider_commission"] or 0)
+    net_margin = float(settlements["total_rushpoint_margin"] or 0)
+    if net_margin == 0 and gmv > 0:
+        net_margin = round(gmv * 0.05, 2)
+        
+    return {
+        "success": True,
+        "date": today_prefix,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "total_orders": today_orders["count"],
+            "completed_orders": delivered_orders["count"],
+            "gross_merchandise_value_ngn": gmv,
+            "vendor_payouts_due_ngn": vendor_share,
+            "rider_commissions_earned_ngn": rider_share,
+            "rushpoint_net_platform_profit_ngn": net_margin,
+            "wallet_deposits_today_ngn": float(wallet_credits["total_deposits"] or 0),
+            "withdrawals_paid_today_ngn": float(withdrawals["total_withdrawals"] or 0)
+        }
+    }

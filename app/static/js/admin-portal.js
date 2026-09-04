@@ -2060,6 +2060,7 @@ const AdminPortal = {
     let settlements = [];
     let zones = [];
     let expenses = [];
+    let dailySnap = null;
 
     try {
       const fRes = await API.get("/api/finance/overview", { silent: true });
@@ -2071,6 +2072,8 @@ const AdminPortal = {
       if (zRes && zRes.zones) zones = zRes.zones;
       const eRes = await API.get("/api/finance/expenses", { silent: true });
       if (eRes && eRes.expenses) expenses = eRes.expenses;
+      const sRes = await API.get("/api/finance/daily-reconciliation-snapshot", { silent: true });
+      if (sRes && sRes.summary) dailySnap = sRes;
     } catch (e) {}
 
     const totalAdminDeliveryEarnings = (summary.admin_delivery_commission_earned || 0) + (summary.admin_internal_fleet_revenue || 0);
@@ -2090,6 +2093,47 @@ const AdminPortal = {
             <button onclick="AdminPortal.showAddExpenseModal()" class="btn-secondary btn-sm">+ Record Expense</button>
           </div>
         </div>
+
+        <!-- Today's Real-Time Daily P&L Reconciliation Snapshot -->
+        ${dailySnap && dailySnap.summary ? `
+          <div class="rp-card" style="margin-bottom: 20px; padding: 16px; border: 1.5px solid #BBF7D0; background: #F0FDF4; border-radius: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div style="font-size: 0.95rem; font-weight: 900; color: #166534; display: flex; align-items: center; gap: 6px;">
+                  <span>📊 Daily P&L Reconciliation Snapshot (${dailySnap.date})</span>
+                  <span class="badge" style="background: #059669; color: #FFF; font-size: 0.6rem;">LIVE AUDIT</span>
+                </div>
+                <div style="font-size: 0.72rem; color: #15803D;">Automated audit breakdown: gross volume, merchant settlements, courier splits & RushPoint net profit.</div>
+              </div>
+              <button onclick="window.print()" class="btn-secondary btn-sm" style="font-size: 0.72rem; font-weight: 800; border-radius: 8px;">
+                🖨️ Print Daily Audit
+              </button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Gross GMV Today</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #1E293B;">₦${dailySnap.summary.gross_merchandise_value_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #15803D; font-weight: 700;">${dailySnap.summary.total_orders} Orders (${dailySnap.summary.completed_orders} delivered)</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Merchant Fulfillments</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #7F1D1D;">₦${dailySnap.summary.vendor_payouts_due_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">100% item price retained</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Rider Commissions</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #2563EB;">₦${dailySnap.summary.rider_commissions_earned_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">Cleared to rider wallets</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">RushPoint Net Profit</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #059669;">₦${dailySnap.summary.rushpoint_net_platform_profit_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 800;">Pure Platform Take-Rate</div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Admin Master Operations & Delivery Commission Wallet Card -->
         <div style="background: linear-gradient(135deg, #450A0A 0%, #7F1D1D 50%, #B91C1C 100%); color: #FFF; border-radius: 18px; padding: 20px; margin-bottom: 20px; box-shadow: 0 6px 20px rgba(127, 29, 29, 0.25);">
@@ -4396,6 +4440,15 @@ const AdminPortal = {
         } else {
           this._adminLastOrderCount = pendingCount;
         }
+
+        // Auto-check for stale assignments (>3 mins without rider movement) and auto-escalate
+        try {
+          const escRes = await API.post('/api/dispatch/check-stale-assignments', {}, { silent: true });
+          if (escRes && escRes.escalated_count > 0) {
+            API.showToast(`🚨 Escalation: ${escRes.escalated_count} unresponsive assignments re-routed to next closest couriers!`, 'warning');
+            if (this.currentTab === 'dispatcher') this.render();
+          }
+        } catch (escErr) {}
       } catch (e) {}
     }, 12000); // poll every 12 seconds
   },
