@@ -2066,6 +2066,7 @@ const AdminPortal = {
     let zones = [];
     let expenses = [];
     let dailySnap = null;
+    let fuelData = null;
 
     try {
       const fRes = await API.get("/api/finance/overview", { silent: true });
@@ -2079,6 +2080,8 @@ const AdminPortal = {
       if (eRes && eRes.expenses) expenses = eRes.expenses;
       const sRes = await API.get("/api/finance/daily-reconciliation-snapshot", { silent: true });
       if (sRes && sRes.summary) dailySnap = sRes;
+      const fuelRes = await API.get("/api/finance/internal-fleet-fuel-allowance", { silent: true });
+      if (fuelRes && fuelRes.success) fuelData = fuelRes;
     } catch (e) {}
 
     const totalAdminDeliveryEarnings = (summary.admin_delivery_commission_earned || 0) + (summary.admin_internal_fleet_revenue || 0);
@@ -2188,6 +2191,79 @@ const AdminPortal = {
             </div>
           </div>
           <div id="lateCompInfo" style="margin-top: 12px; font-size: 0.72rem; color: #065F46; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 8px 12px; display: none;"></div>
+        </div>
+
+        <!-- ⛽ Internal Fleet Fuel & Mileage Reimbursement Sheet -->
+        <div class="rp-card" style="margin-bottom: 20px; padding: 18px; border: 1.5px solid #93C5FD; background: #F0F9FF; border-radius: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 900; color: #1E40AF; display: flex; align-items: center; gap: 6px;">
+                ⛽ Internal Fleet Fuel & Mileage Reimbursement Sheet
+                <span class="badge" style="background: #2563EB; color: #FFF; font-size: 0.6rem;">LIVE MILEAGE</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #1E3A8A; margin-top: 2px;">
+                Auto-calculated fuel stipend (<strong>₦${fuelData ? fuelData.rate_per_km_ngn : 80}/KM</strong>) for company salaried riders based on today's completed deliveries.
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="text-align: right;">
+                <div style="font-size: 0.68rem; color: #1E40AF; font-weight: 700;">Total Fuel Due Today</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #1D4ED8;">₦${(fuelData ? fuelData.total_fuel_allowance_due_ngn : 0).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          ${fuelData && fuelData.riders && fuelData.riders.length > 0 ? `
+            <div class="rp-table-container" style="background: #FFF; border-radius: 10px; border: 1px solid #BFDBFE;">
+              <table class="rp-table">
+                <thead>
+                  <tr style="background: #EFF6FF;">
+                    <th>Rider / Ref</th>
+                    <th>Vehicle / Plate</th>
+                    <th>Today's Deliveries</th>
+                    <th>Estimated KM</th>
+                    <th>Fuel Allowance</th>
+                    <th>Current Wallet</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${fuelData.riders.map(r => `
+                    <tr>
+                      <td>
+                        <strong>${r.full_name}</strong>
+                        <div style="font-size: 0.68rem; color: #64748B;"><code>${r.rider_ref}</code></div>
+                      </td>
+                      <td style="font-size: 0.78rem;">
+                        <div>${r.vehicle_type || 'BIKE'}</div>
+                        <div style="font-size: 0.68rem; color: #64748B;">${r.plate_number || 'No Plate'}</div>
+                      </td>
+                      <td>
+                        <span class="badge ${r.today_deliveries_count > 0 ? 'badge-confirmed' : 'badge-pending'}">
+                          ${r.today_deliveries_count} orders
+                        </span>
+                      </td>
+                      <td><strong>${r.today_km_driven} km</strong></td>
+                      <td><strong style="color: #2563EB;">₦${r.today_fuel_allowance_ngn.toLocaleString()}</strong></td>
+                      <td style="font-size: 0.78rem;">₦${r.wallet_balance.toLocaleString()}</td>
+                      <td style="text-align: right;">
+                        <button onclick="AdminPortal.disburseRiderFuelPayout('${r.rider_id}', ${r.today_fuel_allowance_ngn}, '${r.full_name.replace(/'/g, "\\'")}')"
+                          class="btn-primary btn-sm"
+                          style="background: #2563EB; border-color: #1D4ED8; font-size: 0.72rem; padding: 4px 10px; border-radius: 8px;"
+                          ${r.today_fuel_allowance_ngn <= 0 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                          ⛽ Disburse Fuel
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `
+            <div style="background: #FFF; border-radius: 10px; padding: 16px; text-align: center; color: #64748B; font-size: 0.8rem; border: 1px dashed #BFDBFE;">
+              No internal company riders registered yet. Internal fleet members are configured under Fleet Management.
+            </div>
+          `}
         </div>
 
         <!-- Admin Master Operations & Delivery Commission Wallet Card -->
@@ -4879,6 +4955,29 @@ const AdminPortal = {
       if (window.MobileApp) window.MobileApp.render();
     } catch (err) {
       API.showToast(err.message || "Payout disbursement failed", "error");
+    }
+  },
+
+  async disburseRiderFuelPayout(riderId, suggestedAmount, riderName) {
+    const amountStr = prompt(`Enter fuel allowance payout amount for ${riderName} (₦):`, suggestedAmount || 1000);
+    if (!amountStr) return;
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount <= 0) {
+      API.showToast("Invalid fuel allowance amount", "error");
+      return;
+    }
+    const notes = prompt("Enter memo or note (e.g. Daily Fuel - Katsina Hub):", `Daily Fuel Allowance for ${riderName}`) || "Daily Fuel Allowance";
+    try {
+      const res = await API.post("/api/finance/internal-fleet-fuel-payout", {
+        rider_id: riderId,
+        amount: amount,
+        notes: notes
+      });
+      API.showToast(res.message || `Fuel payout of ₦${amount.toLocaleString()} credited successfully!`, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to disburse fuel allowance", "error");
     }
   },
 

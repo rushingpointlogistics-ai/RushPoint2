@@ -551,3 +551,126 @@ def check_and_compensate_late_deliveries():
         "message": f"Compensation run complete: {len(compensated)} customer(s) credited ₦{credit_amount:,.0f} for late deliveries."
     }
 
+
+@router.post("/sms-inbound")
+def process_inbound_sms_command(payload: dict):
+    """
+    100% Free Inbound SMS Dispatch Gateway:
+    Receives forwarded SMS from a dispatch Android phone or free open-source SMS forwarder webhook.
+    Supported command formats from couriers:
+      - ACCEPT <ORDER_REF> (e.g., ACCEPT RP-ORD-1029) -> Confirms pickup/in-transit
+      - POD <ORDER_REF> <PIN> (e.g., POD RP-ORD-1029 4819) -> Verifies delivery and releases funds
+    """
+    raw_sender = str(payload.get("sender") or payload.get("from") or payload.get("phone") or "").strip()
+    raw_text = str(payload.get("message") or payload.get("text") or payload.get("body") or "").strip()
+
+    if not raw_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing SMS message body.")
+
+    clean_sender = "".join(filter(str.isdigit, raw_sender))
+    if clean_sender.startswith("234"):
+        clean_sender_alt = "0" + clean_sender[3:]
+    elif clean_sender.startswith("0"):
+        clean_sender_alt = "234" + clean_sender[1:]
+    else:
+        clean_sender_alt = clean_sender
+
+    conn = get_db_connection()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    rider = None
+    if clean_sender:
+        rider = conn.execute("""
+            SELECT r.*, u.full_name, u.phone FROM riders r
+            JOIN users u ON r.user_id = u.id
+            WHERE u.phone LIKE ? OR u.phone LIKE ?
+        """, (f"%{clean_sender}%", f"%{clean_sender_alt}%")).fetchone()
+
+    parts = raw_text.split()
+    cmd = parts[0].upper() if parts else ""
+
+    if cmd == "ACCEPT" and len(parts) >= 2:
+        order_ref = parts[1].upper()
+        ord_row = conn.execute("SELECT * FROM orders WHERE order_ref = ? OR id = ?", (order_ref, order_ref)).fetchone()
+        if not ord_row:
+            conn.close()
+            return {"success": False, "error": f"Order {order_ref} not found."}
+
+        new_st = "IN_TRANSIT" if ord_row["status"] == "PICKED_UP" else "PICKED_UP"
+        rider_id = rider["id"] if rider else ord_row["rider_id"]
+        conn.execute("UPDATE orders SET status = ?, rider_id = COALESCE(?, rider_id), updated_at = ? WHERE id = ?", (new_st, rider_id, now_iso, ord_row["id"]))
+        
+        conn.execute("""
+            INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+            VALUES (?, ?, ?, ?, ?, 'Courier SMS Gateway', ?, ?)
+        """, (str(uuid.uuid4()), ord_row["id"], ord_row["status"], new_st, rider["user_id"] if rider else "SMS_GW", f"SMS Command: {raw_text}", now_iso))
+
+        conn.commit()
+        conn.close()
+        return {
+            "success": True,
+            "action": "ACCEPT",
+            "order_ref": order_ref,
+            "new_status": new_st,
+            "reply_sms": f"RushPoint: Order {order_ref} updated to {new_st}. Proceed to doorstep dropoff."
+        }
+
+    elif cmd == "POD" and len(parts) >= 3:
+        order_ref = parts[1].upper()
+        pin = parts[2].strip()
+        ord_row = conn.execute("SELECT * FROM orders WHERE order_ref = ? OR id = ?", (order_ref, order_ref)).fetchone()
+        if not ord_row:
+            conn.close()
+            return {"success": False, "error": f"Order {order_ref} not found."}
+
+        if str(ord_row["pod_otp"]).strip() != pin:
+            conn.close()
+            return {"success": False, "error": f"Invalid PIN {pin} for order {order_ref}. Ask customer for correct 4-digit code."}
+
+        order_id = ord_row["id"]
+        conn.execute("UPDATE orders SET status = 'DELIVERED', pod_verified_at = ?, updated_at = ? WHERE id = ?", (now_iso, now_iso, order_id))
+
+        settlement = conn.execute("SELECT * FROM financial_settlements WHERE order_id = ?", (order_id,)).fetchone()
+        rider_payout = 0.0
+        if settlement and settlement["status"] == "ESCROW_HELD":
+            conn.execute("UPDATE financial_settlements SET status = 'CLEARED' WHERE id = ?", (settlement["id"],))
+            target_rider_id = rider["id"] if rider else ord_row["rider_id"]
+            if target_rider_id:
+                r_row = conn.execute("SELECT r.*, u.id as user_id FROM riders r JOIN users u ON r.user_id = u.id WHERE r.id = ?", (target_rider_id,)).fetchone()
+                if r_row:
+                    rider_payout = settlement["rider_earnings"]
+                    r_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (r_row["user_id"],)).fetchone()
+                    if r_wallet:
+                        new_r_bal = r_wallet["balance"] + rider_payout
+                        conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_r_bal, now_iso, r_wallet["id"]))
+                        conn.execute("""
+                            INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+                        """, (str(uuid.uuid4()), r_wallet["id"], r_row["user_id"], f"RP-SMS-POD-{order_ref}", rider_payout, f"SMS Delivery POD Payout ({order_ref})", new_r_bal, now_iso))
+
+                    conn.execute("""
+                        UPDATE riders SET operational_status = 'AVAILABLE', total_deliveries = total_deliveries + 1, updated_at = ? WHERE id = ?
+                    """, (now_iso, target_rider_id))
+
+        conn.execute("""
+            INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+            VALUES (?, ?, ?, 'DELIVERED', ?, 'Courier SMS Gateway', ?, ?)
+        """, (str(uuid.uuid4()), order_id, ord_row["status"], rider["user_id"] if rider else "SMS_GW", f"SMS POD Verified PIN {pin}. Escrow released.", now_iso))
+
+        conn.commit()
+        conn.close()
+        return {
+            "success": True,
+            "action": "POD_DELIVERY_COMPLETE",
+            "order_ref": order_ref,
+            "rider_payout_ngn": rider_payout,
+            "reply_sms": f"RushPoint: Order {order_ref} verified DELIVERED! ₦{rider_payout:,.2f} credited to your wallet. You are now AVAILABLE."
+        }
+
+    conn.close()
+    return {
+        "success": False,
+        "error": "Unrecognized command format. Use 'ACCEPT <REF>' or 'POD <REF> <PIN>'."
+    }
+
+

@@ -137,6 +137,17 @@ def init_db():
     except Exception:
         pass
 
+    # Store operating hours migration
+    try:
+        cursor.execute("ALTER TABLE stores ADD COLUMN opening_time TEXT DEFAULT '08:00'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE stores ADD COLUMN closing_time TEXT DEFAULT '20:00'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE stores ADD COLUMN is_auto_closed INTEGER DEFAULT 0")
     except Exception:
         pass
 
@@ -246,6 +257,20 @@ def init_db():
         FOREIGN KEY (rider_id) REFERENCES riders (id)
     )
     """)
+
+    # Orders dispute columns migration
+    try:
+        cursor.execute("ALTER TABLE orders ADD COLUMN dispute_status TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE orders ADD COLUMN dispute_reason TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE orders ADD COLUMN disputed_at TEXT DEFAULT NULL")
+    except Exception:
+        pass
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS order_items (

@@ -1812,6 +1812,22 @@ const MobileApp = {
                     📲 Save / Share Receipt on WhatsApp
                   </a>
                 </div>
+
+                <!-- 2-Hour Return / Dispute Resolution Window -->
+                ${o.status === 'DELIVERED' ? `
+                  ${o.dispute_status ? `
+                    <div style="margin-top: 10px; background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 10px; padding: 10px;">
+                      <div style="font-size: 0.75rem; font-weight: 800; color: #92400E;">⚠️ Dispute Raised (${o.dispute_status})</div>
+                      <div style="font-size: 0.68rem; color: #78350F; margin-top: 2px;">${o.dispute_reason || 'Escrow payment frozen pending admin support review.'}</div>
+                    </div>
+                  ` : `
+                    <div style="margin-top: 10px;">
+                      <button onclick="MobileApp.showOrderDisputeModal('${o.id}', '${o.order_ref}')" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border-radius: 10px; padding: 9px; font-size: 0.75rem; font-weight: 800; color: #DC2626; border-color: #FECACA; background: #FFF5F5; cursor: pointer;">
+                        ⚠️ Report Damaged / Missing Item (2-Hour Window)
+                      </button>
+                    </div>
+                  `}
+                ` : ''}
               </div>
             ` : `
               <!-- Rider & Admin View: Live GPS Radar Map + 1-Tap Google Maps Navigation -->
@@ -3042,7 +3058,22 @@ const MobileApp = {
     } catch (e) {}
 
     const rider = profile?.rider;
-    const activeOrder = profile?.active_order;
+    let activeOrder = profile?.active_order;
+
+    // Offline Local Storage Mission Caching for Low-Bandwidth Markets
+    if (activeOrder) {
+      try {
+        localStorage.setItem('rp_cached_mission', JSON.stringify(activeOrder));
+      } catch (e) {}
+    } else if (!activeOrder) {
+      try {
+        const cached = localStorage.getItem('rp_cached_mission');
+        if (cached) {
+          activeOrder = JSON.parse(cached);
+          activeOrder._is_offline_cached = true;
+        }
+      } catch (e) {}
+    }
 
     // Start Native Device Phone GPS Tracking if Rider is Online
     if (rider?.operational_status === 'AVAILABLE') {
@@ -3089,6 +3120,13 @@ const MobileApp = {
             Sync GPS
           </button>
         </div>
+
+        ${activeOrder?._is_offline_cached ? `
+          <div style="background: #FEF3C7; border-bottom: 1.5px solid #FCD34D; color: #92400E; padding: 6px 12px; font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>📶</span>
+            <span>Offline Mode Active: Showing saved mission details. You can drop off even with low network!</span>
+          </div>
+        ` : ''}
 
         <div class="mobile-content-area">
           ${this.getRiderTabHtml(activeOrder, rider, wallet, user, earningsData)}
@@ -4125,6 +4163,142 @@ const MobileApp = {
       </div>
     `;
     document.body.appendChild(modal);
+  },
+
+  showOrderDisputeModal(orderId, orderRef) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 440px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: #991B1B; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span> Report Order Issue (${orderRef})
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #991B1B;">
+          <strong>RushPoint Escrow Protection:</strong> You have a 2-hour window after delivery to report missing or damaged goods. Submitting this dispute freezes the merchant payout until resolved.
+        </div>
+
+        <form onsubmit="MobileApp.submitOrderDispute(event, '${orderId}')">
+          <div class="rp-form-group">
+            <label class="rp-label">Issue Category</label>
+            <select id="disp-reason" class="rp-select" required>
+              <option value="Missing Item">📦 Missing Item(s) in Parcel</option>
+              <option value="Damaged Goods">💥 Damaged or Spilled Product</option>
+              <option value="Wrong Item Delivered">🔄 Wrong Item Delivered</option>
+              <option value="Poor Quality / Expired">⚠️ Poor Quality / Spoiled Item</option>
+              <option value="Other">❓ Other Issue</option>
+            </select>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Explanation & Details</label>
+            <textarea id="disp-details" class="rp-textarea" rows="3" placeholder="Describe exactly what was missing or damaged..." required></textarea>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 14px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #DC2626; border-color: #B91C1C; font-weight: 800;">
+              Submit Dispute to Support
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async submitOrderDispute(e, orderId) {
+    e.preventDefault();
+    const reason = document.getElementById("disp-reason").value;
+    const details = document.getElementById("disp-details").value.trim();
+
+    try {
+      const res = await API.post(`/api/orders/${orderId}/dispute`, { reason, details });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Dispute submitted. Support is reviewing.", "success");
+      this.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to submit dispute", "error");
+    }
+  },
+
+  showVendorOperatingHoursModal(openingTime = "08:00", closingTime = "20:00", isAutoClosed = false) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 420px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 8px;">
+            <span>⏰</span> Store Operating Hours & Pause
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #64748B;">
+          Set daily opening and closing hours. During prayer times or night rest, toggle <strong>Prayer / Rest Pause</strong> to avoid missed orders.
+        </div>
+
+        <form onsubmit="MobileApp.saveVendorOperatingHours(event)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="rp-form-group">
+              <label class="rp-label">Daily Open Time</label>
+              <input type="time" id="vnd-open-time" class="rp-input" value="${openingTime || '08:00'}" required>
+            </div>
+            <div class="rp-form-group">
+              <label class="rp-label">Daily Close Time</label>
+              <input type="time" id="vnd-close-time" class="rp-input" value="${closingTime || '20:00'}" required>
+            </div>
+          </div>
+
+          <div class="rp-form-group" style="margin-top: 10px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.78rem; font-weight: 800; color: #92400E;">
+              <input type="checkbox" id="vnd-auto-pause" ${isAutoClosed ? 'checked' : ''} style="width: 18px; height: 18px;">
+              ⏸️ Temporary Pause (Prayer / Lunch / Rest)
+            </label>
+            <div style="font-size: 0.65rem; color: #78350F; margin-top: 4px; margin-left: 26px;">
+              When checked, customers cannot place new orders until unchecked.
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; font-weight: 800;">
+              Save Hours 💾
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async saveVendorOperatingHours(e) {
+    e.preventDefault();
+    const opening_time = document.getElementById("vnd-open-time").value;
+    const closing_time = document.getElementById("vnd-close-time").value;
+    const is_auto_closed = document.getElementById("vnd-auto-pause").checked;
+
+    try {
+      const res = await API.put("/api/vendors/operating-hours", { opening_time, closing_time, is_auto_closed });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Operating hours updated!", "success");
+      this.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to update operating hours", "error");
+    }
+  },
+
+  generateVendorOrderWhatsAppAlert(order, vendorPhone) {
+    const cleanPhone = (vendorPhone || "").replace(/[^0-9]/g, "");
+    const msg = `👋 Salam/Hello! You have a new RushPoint order *${order.order_ref}*.\n📦 Total: ₦${(order.total_amount || 0).toLocaleString()}\n📍 Please check your RushPoint app to confirm and package the items!`;
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
   },
 
 };

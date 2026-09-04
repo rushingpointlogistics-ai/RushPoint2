@@ -709,3 +709,126 @@ def bulk_confirm_delivery(payload: dict = {}, current_user: dict = Depends(requi
         "message": f"Successfully bulk-verified {confirmed_count} deliveries. Disbursed ₦{total_disbursed:,.2f} to couriers."
     }
 
+
+@router.post("/{order_id}/dispute")
+def report_order_issue_dispute(order_id: str, payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Customer 2-Hour Return & Issue Dispute Window:
+    Allows customers to report damaged goods, missing items, or wrong products within 2 hours of delivery.
+    Puts financial settlement on dispute hold and alerts administration.
+    """
+    reason = str(payload.get("reason", "")).strip()
+    details = str(payload.get("details", "")).strip()
+
+    if not reason:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Dispute reason is required.")
+
+    conn = get_db_connection()
+    ord_row = conn.execute("SELECT * FROM orders WHERE id = ? OR order_ref = ?", (order_id, order_id)).fetchone()
+    if not ord_row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    if ord_row["customer_id"] != current_user["id"] and current_user.get("account_type") not in ["ADMIN", "Super Admin"]:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to dispute this order.")
+
+    if ord_row["status"] != "DELIVERED":
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only delivered orders can be disputed.")
+
+    # Validate 2-hour window
+    now = datetime.now(timezone.utc)
+    verified_at_str = ord_row["pod_verified_at"] or ord_row["updated_at"]
+    try:
+        deliv_dt = datetime.fromisoformat(verified_at_str.replace("Z", "+00:00"))
+        hours_passed = (now - deliv_dt).total_seconds() / 3600.0
+        if hours_passed > 2.0 and current_user.get("account_type") not in ["ADMIN", "Super Admin"]:
+            conn.close()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The 2-hour issue dispute window has expired for this order. Please contact Admin Support directly."
+            )
+    except Exception as e:
+        pass
+
+    now_iso = now.isoformat()
+    conn.execute("""
+        UPDATE orders
+        SET dispute_status = 'PENDING',
+            dispute_reason = ?,
+            disputed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (f"{reason}: {details}".strip(": "), now_iso, now_iso, ord_row["id"]))
+
+    # Put settlement on hold if still open
+    conn.execute("UPDATE financial_settlements SET status = 'DISPUTED' WHERE order_id = ?", (ord_row["id"],))
+
+    # Add timeline event
+    conn.execute("""
+        INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+        VALUES (?, ?, 'DELIVERED', 'DISPUTED', ?, 'Customer', ?, ?)
+    """, (str(uuid.uuid4()), ord_row["id"], current_user["id"], f"⚠️ Customer raised dispute: {reason}. {details}", now_iso))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "dispute_status": "PENDING",
+        "message": "Your issue has been reported. RushPoint Support will review within 30 minutes and hold vendor settlement."
+    }
+
+
+@router.post("/{order_id}/resolve-dispute")
+def resolve_order_dispute(order_id: str, payload: dict, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Operations Manager"]))):
+    """
+    Admin Dispute Resolution:
+    Decision: 'REFUND_CUSTOMER' (full wallet refund) or 'REJECT_DISPUTE' (clears dispute and unfreezes settlement).
+    """
+    decision = str(payload.get("decision", "")).upper() # REFUND_CUSTOMER or REJECT_DISPUTE
+    admin_notes = str(payload.get("notes", "Dispute resolved by Admin")).strip()
+
+    if decision not in ["REFUND_CUSTOMER", "REJECT_DISPUTE"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Decision must be 'REFUND_CUSTOMER' or 'REJECT_DISPUTE'.")
+
+    conn = get_db_connection()
+    ord_row = conn.execute("SELECT * FROM orders WHERE id = ? OR order_ref = ?", (order_id, order_id)).fetchone()
+    if not ord_row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if decision == "REFUND_CUSTOMER":
+        conn.execute("UPDATE orders SET dispute_status = 'REFUNDED', payment_status = 'REFUNDED', updated_at = ? WHERE id = ?", (now_iso, ord_row["id"]))
+        
+        # Credit customer wallet
+        c_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (ord_row["customer_id"],)).fetchone()
+        if c_wallet:
+            new_bal = c_wallet["balance"] + ord_row["total_amount"]
+            conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, now_iso, c_wallet["id"]))
+            conn.execute("""
+                INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+            """, (str(uuid.uuid4()), c_wallet["id"], ord_row["customer_id"], f"RP-DISPUTE-REF-{ord_row['order_ref']}", ord_row["total_amount"], f"Dispute Refund for Order #{ord_row['order_ref']}", new_bal, now_iso))
+
+        conn.execute("UPDATE financial_settlements SET status = 'CANCELLED_REFUNDED' WHERE order_id = ?", (ord_row["id"],))
+        msg = f"Dispute approved: Full refund of ₦{ord_row['total_amount']:,.2f} credited to customer wallet."
+    else:
+        conn.execute("UPDATE orders SET dispute_status = 'REJECTED', updated_at = ? WHERE id = ?", (now_iso, ord_row["id"]))
+        conn.execute("UPDATE financial_settlements SET status = 'CLEARED' WHERE order_id = ?", (ord_row["id"],))
+        msg = "Dispute rejected: Vendor & courier settlements restored as cleared."
+
+    conn.execute("""
+        INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+        VALUES (?, ?, 'DISPUTED', ?, ?, 'Admin / Dispute Officer', ?, ?)
+    """, (str(uuid.uuid4()), ord_row["id"], "REFUNDED" if decision == "REFUND_CUSTOMER" else "DELIVERED", current_user["id"], f"Decision: {decision}. {admin_notes}", now_iso))
+
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "decision": decision, "message": msg}
+
+

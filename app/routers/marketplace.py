@@ -294,8 +294,13 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Store is currently unavailable.")
     store = dict(store_row)
-        
-    # Recalculate accurately on backend
+    if store.get("is_auto_closed"):
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{store['store_name']}' is temporarily paused by the merchant (prayer / rest). Orders will resume shortly!"
+        )
+
     subtotal = 0.0
     order_items_to_insert = []
     raw_items_for_calc = []

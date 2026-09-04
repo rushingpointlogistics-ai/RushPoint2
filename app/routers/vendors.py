@@ -243,7 +243,6 @@ def get_vendor_low_stock_alerts(current_user: dict = Depends(get_current_user)):
     """, (store["id"],)).fetchall()
     conn.close()
 
-    items = [dict(r) for r in rows]
     return {
         "success": True,
         "store_id": store["id"],
@@ -251,4 +250,54 @@ def get_vendor_low_stock_alerts(current_user: dict = Depends(get_current_user)):
         "low_stock_count": len(items),
         "products": items
     }
+
+
+@router.put("/operating-hours")
+def update_store_operating_hours(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Vendor Operating Hours & Scheduled Auto-Pause (Prayer / Night Times):
+    Allows vendor to set opening_time (e.g. '08:00'), closing_time (e.g. '20:00'), and is_auto_closed.
+    """
+    if current_user.get("account_type") != "VENDOR":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only vendors can update operating hours.")
+
+    opening_time = str(payload.get("opening_time", "08:00")).strip()
+    closing_time = str(payload.get("closing_time", "20:00")).strip()
+    is_auto_closed = 1 if payload.get("is_auto_closed") in [True, 1, "1"] else 0
+
+    conn = get_db_connection()
+    vendor = conn.execute("SELECT id FROM vendors WHERE user_id = ?", (current_user["id"],)).fetchone()
+    if not vendor:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor record not found.")
+
+    store = conn.execute("SELECT id, store_name FROM stores WHERE vendor_id = ?", (vendor["id"],)).fetchone()
+    if not store:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store record not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn.execute("""
+        UPDATE stores
+        SET opening_time = ?,
+            closing_time = ?,
+            is_auto_closed = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (opening_time, closing_time, is_auto_closed, now_iso, store["id"]))
+
+    conn.commit()
+    conn.close()
+
+    status_str = "Paused / Closed for Prayer or Night" if is_auto_closed else f"Open ({opening_time} - {closing_time})"
+    return {
+        "success": True,
+        "store_id": store["id"],
+        "opening_time": opening_time,
+        "closing_time": closing_time,
+        "is_auto_closed": bool(is_auto_closed),
+        "status_label": status_str,
+        "message": f"Operating hours updated: {status_str}."
+    }
+
 

@@ -831,4 +831,112 @@ def get_daily_reconciliation_snapshot(current_user: dict = Depends(require_role(
             "wallet_deposits_today_ngn": float(wallet_credits["total_deposits"] or 0),
             "withdrawals_paid_today_ngn": float(withdrawals["total_withdrawals"] or 0)
         }
-    }
+    }
+
+
+@router.get("/internal-fleet-fuel-allowance")
+def get_internal_fleet_fuel_allowance(current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Finance Officer", "Operations Manager"]))):
+    """
+    Internal Fleet Fuel & Maintenance Allowance Calculator:
+    Calculates total daily & weekly kilometers completed by internal company riders
+    and computes recommended fuel stipends (default ₦80/KM).
+    """
+    conn = get_db_connection()
+    today_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    rate_row = conn.execute("SELECT value FROM system_settings WHERE key = 'fuel_rate_per_km'").fetchone()
+    rate_per_km = float(rate_row["value"]) if rate_row and rate_row["value"] else 80.0
+
+    internal_riders = conn.execute("""
+        SELECT r.*, u.full_name, u.phone, w.id as wallet_id, w.balance as wallet_balance
+        FROM riders r
+        JOIN users u ON r.user_id = u.id
+        LEFT JOIN wallets w ON w.user_id = u.id
+        WHERE r.rider_type = 'INTERNAL'
+        ORDER BY r.total_deliveries DESC
+    """).fetchall()
+
+    riders_sheet = []
+    total_fuel_payout_due = 0.0
+
+    for r in internal_riders:
+        # Today's completed orders
+        today_deliveries = conn.execute("""
+            SELECT id, order_ref, delivery_fee, created_at, updated_at
+            FROM orders
+            WHERE rider_id = ? AND status = 'DELIVERED' AND updated_at LIKE ?
+        """, (r["id"], f"{today_prefix}%")).fetchall()
+
+        # Estimate distance: 5km base + 1km per 150 NGN delivery fee over 800
+        total_km_today = 0.0
+        for ord_d in today_deliveries:
+            fee = float(ord_d["delivery_fee"] or 800.0)
+            est_km = max(3.0, round(fee / 160.0, 1))
+            total_km_today += est_km
+
+        today_fuel_allowance = round(total_km_today * rate_per_km, 2)
+        total_fuel_payout_due += today_fuel_allowance
+
+        riders_sheet.append({
+            "rider_id": r["id"],
+            "user_id": r["user_id"],
+            "full_name": r["full_name"],
+            "rider_ref": r["rider_ref"],
+            "vehicle_type": r["vehicle_type"],
+            "plate_number": r["plate_number"],
+            "wallet_balance": float(r["wallet_balance"] or 0.0),
+            "today_deliveries_count": len(today_deliveries),
+            "today_km_driven": round(total_km_today, 1),
+            "rate_per_km_ngn": rate_per_km,
+            "today_fuel_allowance_ngn": today_fuel_allowance
+        })
+
+    conn.close()
+
+    return {
+        "success": True,
+        "date": today_prefix,
+        "rate_per_km_ngn": rate_per_km,
+        "total_internal_riders": len(riders_sheet),
+        "total_fuel_allowance_due_ngn": total_fuel_payout_due,
+        "riders": riders_sheet
+    }
+
+
+@router.post("/internal-fleet-fuel-payout")
+def disburse_fuel_allowance_payout(payload: dict, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Finance Officer"]))):
+    """
+    Disburse fuel allowance to internal rider wallet or as recorded operational expense.
+    """
+    rider_id = payload.get("rider_id")
+    amount = float(payload.get("amount", 0.0))
+    notes = str(payload.get("notes", "Daily Fuel & Maintenance Reimbursement")).strip()
+
+    if not rider_id or amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rider ID and positive amount required.")
+
+    conn = get_db_connection()
+    rider = conn.execute("SELECT r.*, u.full_name FROM riders r JOIN users u ON r.user_id = u.id WHERE r.id = ?", (rider_id,)).fetchone()
+    if not rider:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rider not found.")
+
+    r_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (rider["user_id"],)).fetchone()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if r_wallet:
+        new_bal = r_wallet["balance"] + amount
+        conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, now_iso, r_wallet["id"]))
+        conn.execute("""
+            INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+        """, (str(uuid.uuid4()), r_wallet["id"], rider["user_id"], f"RP-FUEL-{secrets.randbelow(900000)+100000}", amount, f"Fuel Allowance: {notes}", new_bal, now_iso))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "message": f"Successfully disbursed ₦{amount:,.2f} fuel allowance to {rider['full_name']} ({rider['rider_ref']})."
+    }
+
