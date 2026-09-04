@@ -1669,20 +1669,26 @@ const MobileApp = {
 
       const stepProgressPct = currentStep === 1 ? 0 : currentStep === 2 ? 33 : currentStep === 3 ? 66 : 100;
 
+      const user = (typeof API !== 'undefined' && API.getUser()) || null;
+      const isCustomer = !user || user.account_type === 'CUSTOMER';
+      const allowRiderCall = Boolean(o.allow_customer_call_rider && o.rider_phone);
+
       const modal = document.createElement("div");
       modal.className = "modal-backdrop rp-modal-overlay";
       modal.innerHTML = `
-        <div class="modal-dialog" style="max-width: 380px; border-radius: 22px; overflow: hidden; padding: 0;">
+        <div class="modal-dialog" style="max-width: 400px; border-radius: 22px; overflow: hidden; padding: 0;">
           <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <div style="font-size: 0.7rem; opacity: 0.85; text-transform: uppercase; font-weight: 700;">Live Dispatch Radar</div>
+              <div style="font-size: 0.7rem; opacity: 0.85; text-transform: uppercase; font-weight: 700;">
+                ${isCustomer ? '📦 Order Delivery Status' : '📡 Fleet Dispatch Control'}
+              </div>
               <h3 style="font-size: 1.05rem; font-weight: 900; margin: 0;">${o.order_ref}</h3>
             </div>
             <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
           </div>
 
-          <div style="padding: 16px;">
-            <!-- 4-Stage Visual Progress Stepper -->
+          <div style="padding: 16px; max-height: 80vh; overflow-y: auto;">
+            <!-- 4-Stage Visual Progress Stepper (Temu-Style) -->
             <div style="display: flex; justify-content: space-between; position: relative; margin: 12px 6px 20px; text-align: center;">
               <div style="position: absolute; top: 12px; left: 12%; right: 12%; height: 3px; background: #E2E8F0; z-index: 1;"></div>
               <div style="position: absolute; top: 12px; left: 12%; width: ${stepProgressPct * 0.76}%; height: 3px; background: #059669; z-index: 2; transition: width 0.3s;"></div>
@@ -1722,33 +1728,105 @@ const MobileApp = {
               </div>
               <div style="margin-top: 4px;">🏪 Store: <strong>${o.store_name}</strong></div>
               <div style="margin-top: 4px;">📍 Destination: <strong>${o.delivery_address}</strong></div>
-              ${o.rider_name ? `<div style="margin-top: 4px;">🛵 Assigned Courier: <strong>${o.rider_name}</strong></div>` : ''}
+              ${o.rider_name ? `<div style="margin-top: 4px;">🛵 Assigned Courier: <strong>${o.rider_name}</strong> (${o.vehicle_type || 'Motorcycle'})</div>` : '<div style="margin-top: 4px; color: #D97706;">🛵 Courier: <em>Assigning closest available rider...</em></div>'}
               
-              <!-- Direct Contact Rider Buttons -->
-              ${o.rider_phone ? `
-                <div style="display: flex; gap: 8px; margin-top: 10px;">
-                  <a href="tel:${o.rider_phone}" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #0284C7;">📞 Call Rider</a>
-                  <a href="https://wa.me/${o.rider_phone.replace('+', '')}?text=Hello%20Rider%2C%20I%20am%20the%20customer%20for%20order%20${o.order_ref}" target="_blank" class="btn-secondary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #059669; border-color: #A7F3D0; background: #ECFDF5;">💬 WhatsApp</a>
-                </div>
-              ` : ''}
-            </div>
-
-            <!-- Live Interactive Radar Map -->
-            <div style="margin-bottom: 12px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-bottom: 4px;">
-                <span style="font-weight: 800; color: #1E293B;">🗺️ Live GPS Courier Radar</span>
-                <span style="background: #ECFDF5; color: #059669; font-weight: 800; padding: 1px 6px; border-radius: 6px;">⏱️ ~14 mins ETA</span>
+              <!-- Multi-Party Communication Security -->
+              <div style="margin-top: 12px; border-top: 1px dashed #CBD5E1; padding-top: 10px;">
+                ${allowRiderCall ? `
+                  <div style="font-size: 0.68rem; color: #166534; font-weight: 700; margin-bottom: 6px;">🟢 Direct Courier Contact (Admin Approved)</div>
+                  <div style="display: flex; gap: 8px;">
+                    <a href="tel:${o.rider_phone}" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #0284C7;">📞 Call Courier</a>
+                    <a href="https://wa.me/2348007874764?text=Hello%20RushPoint%20Dispatch%2C%20inquiry%20regarding%20Order%20${o.order_ref}" target="_blank" class="btn-secondary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #059669; border-color: #A7F3D0; background: #ECFDF5;">💬 Dispatch Desk</a>
+                  </div>
+                ` : `
+                  <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
+                    <div style="font-size: 0.68rem; color: #166534; font-weight: 700;">🔒 Secure Dispatch Coordination</div>
+                    <div style="font-size: 0.65rem; color: #15803D; margin-top: 2px;">RushPoint Dispatch coordinates directly with your courier to ensure your order arrives safely and on time.</div>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <a href="https://wa.me/2348007874764?text=Hello%20RushPoint%20Dispatch%2C%20inquiry%20regarding%20Order%20${o.order_ref}" target="_blank" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #059669;">
+                      💬 Contact RushPoint Dispatch
+                    </a>
+                    <a href="tel:+2348007874764" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #1E293B;">
+                      📞 Hotline
+                    </a>
+                  </div>
+                `}
               </div>
-              <div id="order-radar-map" style="height: 160px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
             </div>
 
-            <div style="font-weight: 800; font-size: 0.8rem; margin-bottom: 8px; color: #1E293B;">Milestone Timeline</div>
-            <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 180px; overflow-y: auto;">
+            <!-- Customer View: Temu-Style Milestone Checklist (NO MAP for customer) -->
+            ${isCustomer ? `
+              <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+                <div style="font-weight: 800; font-size: 0.8rem; color: #1E293B; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                  <span>📦 Tracking & Checkpoints</span>
+                  <span style="font-size: 0.65rem; color: #059669; font-weight: 700; background: #ECFDF5; padding: 2px 8px; border-radius: 8px;">⏱️ Est. ~15-25 Mins</span>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px; position: relative;">
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: #059669; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">✓</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Order Paid & Escrow Secured</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">4-digit release PIN generated and payment safely held in escrow.</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 2 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 2 ? '✓' : '2'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Merchant Packed & Quality Verified</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">Store has accepted order and packaged items with tamper-evident seal.</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 3 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 3 ? '✓' : '3'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Courier Dispatched to Delivery Area</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">${o.rider_name ? `Package in transit with courier ${o.rider_name}.` : 'Dispatched via RushPoint Courier Network.'}</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 4 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 4 ? '✓' : '4'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Doorstep Inspection & Handover</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">Inspect parcel, then share your 4-digit PIN with the courier to complete.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Temu-Style Buyer Protection Guarantee Card -->
+                <div style="margin-top: 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 10px; display: flex; gap: 8px; align-items: flex-start;">
+                  <span style="font-size: 1.1rem;">🛡️</span>
+                  <div>
+                    <div style="font-size: 0.72rem; font-weight: 800; color: #991B1B;">RushPoint 100% Escrow Guarantee</div>
+                    <div style="font-size: 0.64rem; color: #B91C1C; margin-top: 2px;">If items are missing or damaged, or if delivery is significantly delayed, your payment is refunded instantly into your wallet.</div>
+                  </div>
+                </div>
+              </div>
+            ` : `
+              <!-- Rider & Admin View: Live GPS Radar Map + 1-Tap Google Maps Navigation -->
+              <div style="margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-bottom: 6px;">
+                  <span style="font-weight: 800; color: #1E293B;">🗺️ Courier Radar & Route Map</span>
+                  <a href="https://www.google.com/maps/dir/?api=1&origin=${o.store_lat || 12.9908},${o.store_lng || 7.6018}&destination=${o.delivery_lat || 12.9820},${o.delivery_lng || 7.5950}&travelmode=driving" target="_blank" rel="noopener" style="background: #EFF6FF; border: 1px solid #93C5FD; color: #1D4ED8; font-weight: 800; padding: 2px 8px; border-radius: 6px; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                    🗺️ Turn-by-Turn Google Maps
+                  </a>
+                </div>
+                <div id="order-radar-map" style="height: 180px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
+              </div>
+            `}
+
+            <!-- Milestone Activity Log -->
+            <div style="font-weight: 800; font-size: 0.78rem; margin-bottom: 8px; color: #1E293B;">Activity Log</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 150px; overflow-y: auto;">
               ${timeline.map(t => `
-                <div style="font-size: 0.72rem;">
+                <div style="font-size: 0.7rem;">
                   <span style="font-weight: 800; color: #B91C1C;">${t.to_status}</span>
-                  <div style="font-size: 0.65rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
-                  ${t.notes ? `<div style="font-size: 0.65rem; color: #64748B;">${t.notes}</div>` : ''}
+                  <div style="font-size: 0.64rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
+                  ${t.notes ? `<div style="font-size: 0.64rem; color: #64748B;">${t.notes}</div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -1757,57 +1835,59 @@ const MobileApp = {
       `;
       document.body.appendChild(modal);
 
-      setTimeout(() => {
-        const mapEl = document.getElementById('order-radar-map');
-        if (!mapEl || typeof L === 'undefined') return;
+      if (!isCustomer) {
+        setTimeout(() => {
+          const mapEl = document.getElementById('order-radar-map');
+          if (!mapEl || typeof L === 'undefined') return;
 
-        const storeLat = o.store_lat || 12.9908;
-        const storeLng = o.store_lng || 7.6018;
-        const destLat = o.delivery_lat || 12.9820;
-        const destLng = o.delivery_lng || 7.5950;
+          const storeLat = o.store_lat || 12.9908;
+          const storeLng = o.store_lng || 7.6018;
+          const destLat = o.delivery_lat || 12.9820;
+          const destLng = o.delivery_lng || 7.5950;
 
-        let riderLat = storeLat;
-        let riderLng = storeLng;
-        const sUpper = (o.status || '').toUpperCase();
-        if (sUpper === 'IN_TRANSIT' || sUpper === 'PICKED_UP') {
-          riderLat = (storeLat + destLat) / 2 + 0.0015;
-          riderLng = (storeLng + destLng) / 2 + 0.0015;
-        } else if (sUpper === 'DELIVERED') {
-          riderLat = destLat;
-          riderLng = destLng;
-        }
+          let riderLat = storeLat;
+          let riderLng = storeLng;
+          const sUpper = (o.status || '').toUpperCase();
+          if (sUpper === 'IN_TRANSIT' || sUpper === 'PICKED_UP') {
+            riderLat = (storeLat + destLat) / 2 + 0.0015;
+            riderLng = (storeLng + destLng) / 2 + 0.0015;
+          } else if (sUpper === 'DELIVERED') {
+            riderLat = destLat;
+            riderLng = destLng;
+          }
 
-        const map = L.map('order-radar-map', { zoomControl: false, attributionControl: false }).setView([(storeLat + destLat)/2, (storeLng + destLng)/2], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+          const map = L.map('order-radar-map', { zoomControl: false, attributionControl: false }).setView([(storeLat + destLat)/2, (storeLng + destLng)/2], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
-        const storeIcon = L.divIcon({
-          html: '<div style="background:#7F1D1D;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
-          iconSize: [24, 24], iconAnchor: [12, 12]
-        });
-        L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map).bindPopup(`<b>${o.store_name}</b><br>Store Pickup`);
-
-        const custIcon = L.divIcon({
-          html: '<div style="background:#059669;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
-          iconSize: [24, 24], iconAnchor: [12, 12]
-        });
-        L.marker([destLat, destLng], { icon: custIcon }).addTo(map).bindPopup(`<b>Your Dropoff Point</b><br>${o.delivery_address}`);
-
-        if (sUpper !== 'PENDING' && sUpper !== 'CANCELLED') {
-          const bikeIcon = L.divIcon({
-            html: '<div style="background:#F59E0B;color:#000;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #FFF;box-shadow:0 0 10px rgba(245,158,11,0.8);">🛵</div>',
-            iconSize: [28, 28], iconAnchor: [14, 14]
+          const storeIcon = L.divIcon({
+            html: '<div style="background:#7F1D1D;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
           });
-          L.marker([riderLat, riderLng], { icon: bikeIcon }).addTo(map).bindPopup(`<b>${o.rider_name || 'Assigned Courier'}</b><br>Live GPS Radar`);
-        }
+          L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map).bindPopup(`<b>${o.store_name}</b><br>Store Pickup`);
 
-        L.polyline([[storeLat, storeLng], [riderLat, riderLng], [destLat, destLng]], {
-          color: '#B91C1C', weight: 3, dashArray: '4, 6', opacity: 0.85
-        }).addTo(map);
+          const custIcon = L.divIcon({
+            html: '<div style="background:#059669;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
+          });
+          L.marker([destLat, destLng], { icon: custIcon }).addTo(map).bindPopup(`<b>Destination</b><br>${o.delivery_address}`);
 
-        try {
-          map.fitBounds([[storeLat, storeLng], [destLat, destLng]], { padding: [20, 20] });
-        } catch(e){}
-      }, 150);
+          if (sUpper !== 'PENDING' && sUpper !== 'CANCELLED') {
+            const bikeIcon = L.divIcon({
+              html: '<div style="background:#F59E0B;color:#000;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #FFF;box-shadow:0 0 10px rgba(245,158,11,0.8);">🛵</div>',
+              iconSize: [28, 28], iconAnchor: [14, 14]
+            });
+            L.marker([riderLat, riderLng], { icon: bikeIcon }).addTo(map).bindPopup(`<b>${o.rider_name || 'Assigned Courier'}</b><br>Live GPS Radar`);
+          }
+
+          L.polyline([[storeLat, storeLng], [riderLat, riderLng], [destLat, destLng]], {
+            color: '#B91C1C', weight: 3, dashArray: '4, 6', opacity: 0.85
+          }).addTo(map);
+
+          try {
+            map.fitBounds([[storeLat, storeLng], [destLat, destLng]], { padding: [20, 20] });
+          } catch(e){}
+        }, 150);
+      }
     } catch (e) {}
   },
 
@@ -2264,7 +2344,7 @@ const MobileApp = {
                 <span>${o.order_ref}</span>
                 <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span>
               </div>
-              <div style="font-size: 0.72rem; color: #64748B; margin: 4px 0;">Customer: ${o.customer_name} • ${o.customer_phone || ''}</div>
+              <div style="font-size: 0.72rem; color: #64748B; margin: 4px 0;">Customer: <strong>${o.customer_name}</strong> • <span style="color: #059669; font-weight: 700;">🔒 Contact Protected (Dispatch Coordinates)</span></div>
               <div style="font-size: 0.75rem; color: #B91C1C; font-weight: 800;">Amount: ₦${o.total_amount.toLocaleString()}</div>
               
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">

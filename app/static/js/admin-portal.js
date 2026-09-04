@@ -3021,13 +3021,17 @@ const AdminPortal = {
   async renderDispatcherModule() {
     let orders = [];
     let riders = [];
+    let callSetting = { allow_customer_call_rider: false };
     try {
       const oRes = await API.get("/api/orders/", { silent: true });
       if (oRes && oRes.orders) orders = oRes.orders;
       const rRes = await API.get("/api/riders/live-map", { silent: true });
       if (rRes && rRes.riders) riders = rRes.riders;
+      const cRes = await API.get("/api/dispatch/customer-call-setting", { silent: true });
+      if (cRes) callSetting = cRes;
     } catch (e) {}
 
+    const isCallAllowed = Boolean(callSetting.allow_customer_call_rider);
     const pendingOrders = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status));
     const activeOrders = orders.filter(o => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'].includes(o.status));
     const deliveredToday = orders.filter(o => o.status === 'DELIVERED');
@@ -3038,12 +3042,38 @@ const AdminPortal = {
         <div class="admin-page-header">
           <div>
             <h1 class="admin-page-title">🛵 Dispatcher — Live Order Queue & Assignment</h1>
-            <div class="admin-page-desc">Receive, assign, reassign and track all orders in real-time. Contact riders via WhatsApp instantly.</div>
+            <div class="admin-page-desc">Receive, assign, reassign and track all orders in real-time. Automatic nearest-rider matching enabled.</div>
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            ${pendingOrders.length > 0 ? `
+              <button onclick="AdminPortal.autoAssignAllPending()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800; display: flex; align-items: center; gap: 4px;" title="Automatically pair every pending order with the nearest available courier">
+                ⚡ Auto-Assign All (${pendingOrders.length})
+              </button>
+            ` : ''}
             <button onclick="AdminPortal.render()" class="btn-secondary btn-sm">🔄 Refresh</button>
             <button onclick="AdminPortal.switchTab('dispatch')" class="btn-primary btn-sm">📡 Open Fleet Map</button>
           </div>
+        </div>
+
+        <!-- Dispatch Privacy & Customer Communication Policy Control Bar -->
+        <div class="rp-card" style="margin-bottom: 16px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: ${isCallAllowed ? '#FFFBEB' : '#F0FDF4'}; border: 1.5px solid ${isCallAllowed ? '#FCD34D' : '#BBF7D0'};">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.3rem;">${isCallAllowed ? '⚠️' : '🛡️'}</span>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 6px;">
+                <span>Customer Direct Courier Call:</span>
+                <span class="badge" style="background: ${isCallAllowed ? '#D97706' : '#059669'}; color: #FFF; font-size: 0.62rem; padding: 2px 6px;">
+                  ${isCallAllowed ? '🟢 ENABLED (High Workload Overload Mode)' : '🔒 RESTRICTED (Default — Dispatch Support Handles Calls)'}
+                </span>
+              </div>
+              <div style="font-size: 0.68rem; color: #64748B; margin-top: 2px;">
+                ${isCallAllowed ? 'Customers can call couriers directly. Turn OFF once order rush subsides.' : 'Customers contact RushPoint Dispatch Support only. Couriers can drive safely without phone interruptions.'}
+              </div>
+            </div>
+          </div>
+          <button onclick="AdminPortal.toggleCustomerCallPolicy(${!isCallAllowed})" class="btn-secondary btn-sm" style="font-size: 0.72rem; font-weight: 800; white-space: nowrap; border-color: ${isCallAllowed ? '#B45309' : '#059669'}; color: ${isCallAllowed ? '#B45309' : '#059669'};">
+            ${isCallAllowed ? '🔒 Restore Privacy (Default)' : '⚡ Enable Direct Calling'}
+          </button>
         </div>
 
         <!-- Status KPI Bar -->
@@ -3112,9 +3142,10 @@ const AdminPortal = {
                       <td style="font-size:0.75rem;">${o.delivery_address}</td>
                       <td><code style="background:var(--blood-tint);color:var(--blood-primary);padding:2px 6px;border-radius:4px;font-weight:900;">${o.pod_otp || 'N/A'}</code></td>
                       <td style="display:flex;gap:4px;flex-wrap:wrap;">
-                        <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm">⚡ Assign</button>
-                        <button onclick="AdminPortal.showSimDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF;">📱 SIM</button>
-                        <button onclick="AdminPortal.showRefundModal('${o.id}', '${o.order_ref}', ${o.total_amount})" class="btn-danger btn-sm">💸 Refund</button>
+                        <button onclick="AdminPortal.autoAssignNearestOrder('${o.id}')" class="btn-primary btn-sm" style="background:#059669; font-size:0.68rem; padding:4px 8px;" title="Auto-match nearest courier by vendor GPS">⚡ Auto</button>
+                        <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm" style="font-size:0.68rem; padding:4px 8px;">Assign</button>
+                        <button onclick="AdminPortal.showSimDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF; font-size:0.68rem; padding:4px 8px;">📱 SIM</button>
+                        <button onclick="AdminPortal.showRefundModal('${o.id}', '${o.order_ref}', ${o.total_amount})" class="btn-danger btn-sm" style="font-size:0.68rem; padding:4px 8px;">💸 Refund</button>
                       </td>
                     </tr>
                   `).join('')}
@@ -4456,6 +4487,40 @@ const AdminPortal = {
       </div>
     `;
     document.body.appendChild(panel);
+  },
+
+  async autoAssignNearestOrder(orderId) {
+    try {
+      const res = await API.post(`/api/dispatch/auto-assign/${orderId}`);
+      API.showToast(res.message || "Auto-assigned nearest rider successfully!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to auto-assign rider", "error");
+    }
+  },
+
+  async autoAssignAllPending() {
+    if (!confirm("Auto-assign all pending orders to their nearest available couriers?")) return;
+    try {
+      const res = await API.post("/api/dispatch/auto-assign-all");
+      API.showToast(res.message || "All pending orders auto-assigned!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to auto-assign pending orders", "error");
+    }
+  },
+
+  async toggleCustomerCallPolicy(newState) {
+    try {
+      const res = await API.post("/api/dispatch/customer-call-setting", { enabled: newState });
+      API.showToast(res.message, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast("Could not update customer call policy", "error");
+    }
   },
 
 };

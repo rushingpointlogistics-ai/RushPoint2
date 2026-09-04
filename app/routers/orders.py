@@ -70,11 +70,18 @@ def list_orders(
     query += " ORDER BY o.created_at DESC"
     orders = conn.execute(query, tuple(params)).fetchall()
     
+    user_type = current_user.get("account_type")
     result = []
     for ord_row in orders:
         o_dict = dict(ord_row)
         items = conn.execute("SELECT * FROM order_items WHERE order_id = ?", (ord_row["id"],)).fetchall()
         o_dict["items"] = [dict(it) for it in items]
+        if user_type == "VENDOR":
+            # Mask customer phone to prevent off-platform harassment/circumvention
+            if o_dict.get("customer_phone"):
+                raw_phone = o_dict["customer_phone"]
+                o_dict["customer_phone"] = f"{raw_phone[:4]}****{raw_phone[-3:]}" if len(raw_phone) >= 7 else "****"
+            o_dict["customer_contact_restricted"] = True
         result.append(o_dict)
         
     conn.close()
@@ -102,10 +109,33 @@ def get_order_details(order_id: str, current_user: dict = Depends(get_current_us
     timeline = conn.execute("SELECT * FROM order_timeline WHERE order_id = ? ORDER BY timestamp ASC", (ord_row["id"],)).fetchall()
     settlement = conn.execute("SELECT * FROM financial_settlements WHERE order_id = ?", (ord_row["id"],)).fetchone()
     
+    # Read customer-rider direct call policy setting
+    call_setting_row = conn.execute("SELECT value FROM system_settings WHERE key = 'allow_customer_call_rider'").fetchone()
+    allow_customer_call_rider = (call_setting_row["value"] == "true") if call_setting_row else False
+    
     conn.close()
     
+    order_data = dict(ord_row)
+    user_type = current_user.get("account_type")
+    order_data["allow_customer_call_rider"] = allow_customer_call_rider
+    order_data["dispatch_support_phone"] = "+2348007874764" # 0800-RUSHPOINT
+    
+    # Strict Privacy Enforcement:
+    # 1. Vendor cannot see customer phone or contact them directly
+    if user_type == "VENDOR":
+        if order_data.get("customer_phone"):
+            raw_phone = order_data["customer_phone"]
+            order_data["customer_phone"] = f"{raw_phone[:4]}****{raw_phone[-3:]}" if len(raw_phone) >= 7 else "****"
+        order_data["customer_contact_restricted"] = True
+        
+    # 2. Customer cannot see rider phone unless Admin has explicitly enabled allow_customer_call_rider
+    if user_type == "CUSTOMER":
+        if not allow_customer_call_rider:
+            order_data["rider_phone"] = None
+            order_data["rider_call_restricted"] = True
+    
     return {
-        "order": dict(ord_row),
+        "order": order_data,
         "items": [dict(i) for i in items],
         "timeline": [dict(t) for t in timeline],
         "settlement": dict(settlement) if settlement else None
