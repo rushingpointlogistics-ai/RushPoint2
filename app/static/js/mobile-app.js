@@ -17,6 +17,17 @@ const MobileApp = {
   hideBalance: localStorage.getItem('rp_hide_balance') === 'true',
   isStoreClosed: localStorage.getItem('rp_store_closed') === 'true',
   isRiderOnline: localStorage.getItem('rp_rider_online') !== 'false',
+  deliveryLat: 12.9820,
+  deliveryLng: 7.5950,
+  deliveryAddress: "GRA Residential Main Road, Katsina",
+  deliveryFee: 1200.0,
+  deliveryDistanceKm: 3.2,
+  deliveryDurationMin: 14,
+  checkoutMap: null,
+  checkoutMarker: null,
+  checkoutStoreMarker: null,
+  checkoutRouteLine: null,
+  geocodeDebounceTimer: null,
 
   init() {
     this.render();
@@ -52,9 +63,212 @@ const MobileApp = {
   selectSavedAddress(addr, lat, lon) {
     const input = document.getElementById('checkout-address');
     if (input) input.value = addr;
+    this.deliveryAddress = addr;
     this.deliveryLat = lat;
     this.deliveryLng = lon;
     API.showToast(`📍 Location: ${addr}`, 'success');
+    if (this.checkoutMarker && this.checkoutMap) {
+      this.checkoutMarker.setLatLng([lat, lon]);
+      this.checkoutMap.setView([lat, lon], 14);
+      if (this.checkoutRouteLine && this.checkoutStoreMarker) {
+        this.checkoutRouteLine.setLatLngs([this.checkoutStoreMarker.getLatLng(), [lat, lon]]);
+      }
+    }
+    this.updateLiveDeliveryQuote();
+  },
+
+  onAddressTyped(query) {
+    this.deliveryAddress = query;
+    clearTimeout(this.geocodeDebounceTimer);
+    if (!query || query.trim().length < 3) return;
+    
+    this.geocodeDebounceTimer = setTimeout(async () => {
+      try {
+        const res = await API.get(`/api/marketplace/geocode?query=${encodeURIComponent(query.trim())}`);
+        if (res && res.location) {
+          const loc = res.location;
+          this.deliveryLat = loc.latitude;
+          this.deliveryLng = loc.longitude;
+          if (this.checkoutMarker && this.checkoutMap) {
+            this.checkoutMarker.setLatLng([loc.latitude, loc.longitude]);
+            this.checkoutMap.setView([loc.latitude, loc.longitude], 14);
+            if (this.checkoutRouteLine && this.checkoutStoreMarker) {
+              this.checkoutRouteLine.setLatLngs([this.checkoutStoreMarker.getLatLng(), [loc.latitude, loc.longitude]]);
+            }
+          }
+          await this.updateLiveDeliveryQuote();
+          API.showToast(`📍 Map Aligned: ${loc.formatted_address || query}`, 'info');
+        }
+      } catch (e) {
+        console.warn('Geocoding error:', e);
+      }
+    }, 450);
+  },
+
+  async updateLiveDeliveryQuote() {
+    if (!this.cart || this.cart.length === 0) return;
+    const storeId = this.cart[0].store_id;
+    const totalQty = this.cart.reduce((sum, it) => sum + it.quantity, 0);
+
+    try {
+      const res = await API.post('/api/marketplace/calculate-delivery-quote', {
+        store_id: storeId,
+        customer_lat: this.deliveryLat,
+        customer_lon: this.deliveryLng,
+        cargo_weight_kg: 2.0
+      });
+
+      if (res && res.routing) {
+        const r = res.routing;
+        let baseFee = r.pricing ? r.pricing.total_delivery_fee : 1200.0;
+        
+        // Multi-item rule: buying multiple items in same shop adds +0.2% per item
+        if (this.cart.length > 1) {
+          baseFee += baseFee * (0.002 * (this.cart.length - 1));
+        }
+        // If total quantity > 5: add 4% of delivery of products
+        if (totalQty > 5) {
+          baseFee += baseFee * 0.04;
+        }
+
+        this.deliveryFee = Math.round(baseFee);
+        this.deliveryDistanceKm = r.distance_km || 3.2;
+        this.deliveryDurationMin = r.estimated_duration_minutes || 14;
+
+        // Update DOM elements live
+        const feeEl = document.getElementById('checkout-delivery-fee-val');
+        if (feeEl) feeEl.innerText = `₦${this.deliveryFee.toLocaleString()}`;
+
+        const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const total = subtotal + this.deliveryFee;
+
+        const totalEl = document.getElementById('checkout-total-val');
+        if (totalEl) totalEl.innerText = `₦${total.toLocaleString()}`;
+
+        const flwBtnText = document.getElementById('flw-pay-btn-text');
+        if (flwBtnText) flwBtnText.innerText = `⚡ Pay ₦${total.toLocaleString()} with Flutterwave`;
+
+        const distBadge = document.getElementById('checkout-distance-badge');
+        if (distBadge) {
+          distBadge.innerHTML = `🛣️ <strong>${this.deliveryDistanceKm} km</strong> road distance • ~<strong>${this.deliveryDurationMin} mins</strong> arrival`;
+        }
+
+        const formulaBadge = document.getElementById('checkout-formula-badge');
+        if (formulaBadge) {
+          formulaBadge.innerText = `Calculated by real road distance${this.cart.length > 1 ? ` (+${((this.cart.length - 1) * 0.2).toFixed(1)}% multi-item)` : ''}${totalQty > 5 ? ' (+4% bulk qty)' : ''}`;
+        }
+      }
+    } catch(e) {
+      console.warn('Delivery quote error:', e);
+    }
+  },
+
+  initCheckoutMiniMap() {
+    setTimeout(async () => {
+      const mapContainer = document.getElementById('checkout-mini-map');
+      if (!mapContainer || typeof L === 'undefined') return;
+      
+      if (this.checkoutMap) {
+        try { this.checkoutMap.remove(); } catch(e){}
+        this.checkoutMap = null;
+      }
+
+      let storeLat = 12.9908, storeLng = 7.6018, storeName = "Vendor Stall";
+      try {
+        if (this.cart[0] && this.cart[0].store_id) {
+          const sRes = await API.get(`/api/marketplace/stores/${this.cart[0].store_id}`);
+          if (sRes && sRes.store) {
+            storeLat = sRes.store.latitude || 12.9908;
+            storeLng = sRes.store.longitude || 7.6018;
+            storeName = sRes.store.store_name || "Vendor Stall";
+          }
+        }
+      } catch(e){}
+
+      const custLat = this.deliveryLat || 12.9820;
+      const custLng = this.deliveryLng || 7.5950;
+
+      this.checkoutMap = L.map('checkout-mini-map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([custLat, custLng], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18
+      }).addTo(this.checkoutMap);
+
+      const storeIcon = L.divIcon({
+        className: 'custom-map-icon',
+        html: `<div style="background: #7F1D1D; color: #FFF; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid #FFF;">🏪</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+      this.checkoutStoreMarker = L.marker([storeLat, storeLng], { icon: storeIcon })
+        .addTo(this.checkoutMap)
+        .bindPopup(`<b>${storeName}</b><br>Pickup Origin`);
+
+      const custIcon = L.divIcon({
+        className: 'custom-map-icon',
+        html: `<div style="background: #059669; color: #FFF; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 2px 10px rgba(5,150,105,0.5); border: 2px solid #FFF;">📍</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 28]
+      });
+      this.checkoutMarker = L.marker([custLat, custLng], { icon: custIcon, draggable: true })
+        .addTo(this.checkoutMap)
+        .bindPopup(`<b>Your Dropoff Point</b><br>Drag pin to adjust location!`);
+
+      this.checkoutRouteLine = L.polyline([[storeLat, storeLng], [custLat, custLng]], {
+        color: '#B91C1C',
+        weight: 3,
+        dashArray: '5, 8',
+        opacity: 0.8
+      }).addTo(this.checkoutMap);
+
+      try {
+        this.checkoutMap.fitBounds([[storeLat, storeLng], [custLat, custLng]], { padding: [25, 25] });
+      } catch(e){}
+
+      this.checkoutMarker.on('dragend', async (e) => {
+        const pos = e.target.getLatLng();
+        this.deliveryLat = pos.lat;
+        this.deliveryLng = pos.lng;
+        if (this.checkoutRouteLine) {
+          this.checkoutRouteLine.setLatLngs([[storeLat, storeLng], [pos.lat, pos.lng]]);
+        }
+        try {
+          const rev = await API.get(`/api/marketplace/reverse-geocode?lat=${pos.lat}&lon=${pos.lng}`);
+          if (rev && rev.address && rev.address.formatted_address) {
+            this.deliveryAddress = rev.address.formatted_address;
+            const input = document.getElementById('checkout-address');
+            if (input) input.value = this.deliveryAddress;
+            API.showToast(`📍 Dropoff: ${this.deliveryAddress}`, 'info');
+          }
+        } catch(e){}
+        this.updateLiveDeliveryQuote();
+      });
+
+      this.checkoutMap.on('click', async (e) => {
+        const pos = e.latlng;
+        this.deliveryLat = pos.lat;
+        this.deliveryLng = pos.lng;
+        this.checkoutMarker.setLatLng(pos);
+        if (this.checkoutRouteLine) {
+          this.checkoutRouteLine.setLatLngs([[storeLat, storeLng], [pos.lat, pos.lng]]);
+        }
+        try {
+          const rev = await API.get(`/api/marketplace/reverse-geocode?lat=${pos.lat}&lon=${pos.lng}`);
+          if (rev && rev.address && rev.address.formatted_address) {
+            this.deliveryAddress = rev.address.formatted_address;
+            const input = document.getElementById('checkout-address');
+            if (input) input.value = this.deliveryAddress;
+            API.showToast(`📍 Selected: ${this.deliveryAddress}`, 'info');
+          }
+        } catch(e){}
+        this.updateLiveDeliveryQuote();
+      });
+
+      this.updateLiveDeliveryQuote();
+    }, 150);
   },
 
   toggleStoreOpenStatus() {
@@ -809,7 +1023,10 @@ const MobileApp = {
       `;
     }
 
-    if (this.activeTab === "cart") return this.getCartHtml();
+    if (this.activeTab === "cart") {
+      this.initCheckoutMiniMap();
+      return this.getCartHtml();
+    }
     if (this.activeTab === "orders") return this.getCustomerOrdersHtml(orders);
     if (this.activeTab === "logistics") return this.getIndependentLogisticsHtml();
     if (this.activeTab === "support") return this.getCustomerSupportHtml();
@@ -829,132 +1046,7 @@ const MobileApp = {
     this.render();
   },
 
-  getCartHtml() {
-    if (this.cart.length === 0) {
-      return `
-        <div style="text-align: center; padding: 40px 20px;">
-          <div style="font-size: 3rem; margin-bottom: 10px;">🛒</div>
-          <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">Your Cart is Empty</h3>
-          <p style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">Explore physical vendor stalls and add items to your cart.</p>
-          <button onclick="MobileApp.switchTab('home')" class="btn-primary" style="margin-top: 14px; border-radius: 12px; padding: 10px 20px; background: #B91C1C;">Browse Products</button>
-        </div>
-      `;
-    }
 
-    const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const totalQty = this.cart.reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Internal Intelligent Heuristic Calculation for Heavy/Bulky items
-    const heavyKeywords = ['cement', 'block', 'blocks', 'steel', 'rod', 'iron', 'sandcrete', 'hectare', 'land', 'ton', 'tonne', 'generator', 'machinery'];
-    let heavyCount = 0;
-    
-    this.cart.forEach(it => {
-      const n = (it.name || '').toLowerCase();
-      if (it.is_heavy || heavyKeywords.some(k => n.includes(k))) {
-        heavyCount += it.quantity;
-      }
-    });
-
-    const baseDelivery = 1200.0;
-    let heavySurcharge = 0.0;
-    let vehicleType = "🏍️ Motorcycle (Express Bike)";
-
-    if (heavyCount > 0) {
-      vehicleType = "🛺 Tricycle (Cargo Keke / Van)";
-      heavySurcharge = 1500.0 + (Math.max(0, heavyCount - 1) * 500.0);
-    }
-
-    const totalDelivery = baseDelivery + heavySurcharge;
-    const platformFee = 150.0;
-    const total = subtotal + totalDelivery + platformFee;
-
-    return `
-      <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">Review Shopping Cart (${this.cart.length} items)</div>
-        <div style="flex: 1; overflow-y: auto;">
-          ${this.cart.map((item, idx) => `
-            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-              <div>
-                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">${item.name}</div>
-                <div style="font-size: 0.75rem; color: #B91C1C; font-weight: 800; margin-top: 2px;">₦${item.price.toLocaleString()} x ${item.quantity} = ₦${(item.price * item.quantity).toLocaleString()}</div>
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <button onclick="MobileApp.updateCartQty(${idx}, -1)" class="btn-secondary btn-sm" style="padding: 3px 10px; border-radius: 8px; font-weight: 800;">-</button>
-                <span style="font-weight: 800; font-size: 0.85rem;">${item.quantity}</span>
-                <button onclick="MobileApp.updateCartQty(${idx}, 1)" class="btn-secondary btn-sm" style="padding: 3px 10px; border-radius: 8px; font-weight: 800;">+</button>
-              </div>
-            </div>
-          `).join('')}
-
-          <!-- Transparent Delivery & Price Breakdown -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-top: 12px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Vendor Product Price (100% Retained):</span>
-              <strong>₦${subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Base Delivery Fare:</span>
-              <span>₦${baseDelivery.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-
-            ${heavyCount > 0 ? `
-              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px; color: #B91C1C; font-weight: 800;">
-                <span>⚖️ Heavy Cargo Surcharge (${heavyCount} items):</span>
-                <span>+₦${heavySurcharge.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-              </div>
-              <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 8px; font-size: 0.68rem; color: #7F1D1D; margin-bottom: 8px;">
-                🛺 <strong>Tricycle (Keke Cargo) Required:</strong> Heavy building materials (cement/blocks) automatically increment delivery fee for appropriate transport.
-              </div>
-            ` : `
-              <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 6px 8px; font-size: 0.66rem; color: #166534; margin-bottom: 8px;">
-                ✓ <strong>0% Delivery Increment:</strong> Multiple minor/standard items from the same merchant do not increase delivery fee.
-              </div>
-            `}
-
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748B; margin-bottom: 6px;">
-              <span>Assigned Vehicle Mode:</span>
-              <strong>${vehicleType}</strong>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748B; margin-bottom: 6px;">
-              <span>Platform Service Escrow:</span>
-              <span>₦${platformFee.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
-              <span>Total to Pay:</span>
-              <span>₦${total.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-          </div>
-
-          <div style="margin-top: 14px;">
-            <div class="rp-form-group">
-              <label class="rp-label">Delivery Address</label>
-              <input type="text" id="checkout-address" class="rp-input" value="14 Marina Street, Lagos Island" placeholder="Street, landmark, city" style="border-radius: 10px;">
-            </div>
-            <div class="rp-form-group">
-              <label class="rp-label">Customer Phone</label>
-              <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
-            </div>
-
-            <!-- Payment Methods: Flutterwave vs Wallet -->
-            <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Instant Payment Option:</div>
-            
-            <!-- Flutterwave Gateway Button -->
-            <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
-              <span>⚡ Pay ₦${total.toLocaleString()} via Flutterwave</span>
-            </button>
-
-            <!-- RP Wallet Button -->
-            <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
-              <span>👛 Pay with RushPoint Wallet</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  },
 
   getCustomerAccountHtml(wallet, user) {
     return `
@@ -1200,13 +1292,26 @@ const MobileApp = {
     }
 
     const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFee = 1200.0;
+    const totalQty = this.cart.reduce((sum, item) => sum + item.quantity, 0);
+    const deliveryFee = this.deliveryFee || 1200.0;
     const total = subtotal + deliveryFee;
+
+    // Temu-style Recommended Items (Frequently Bought Together)
+    const recommendedItems = [
+      { id: "rec-1", name: "Family Fresh Bread", price: 1200, origPrice: 1500, discount: "-20%", rating: "4.9", sold: "128 sold", img: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=200", store_id: this.cart[0]?.store_id },
+      { id: "rec-2", name: "Premium Honey Jar (500g)", price: 2200, origPrice: 2800, discount: "-21%", rating: "5.0", sold: "86 sold", img: "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=200", store_id: this.cart[0]?.store_id },
+      { id: "rec-3", name: "Cold Malt Energy Can", price: 650, origPrice: 800, discount: "-18%", rating: "4.8", sold: "240 sold", img: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=200", store_id: this.cart[0]?.store_id }
+    ];
 
     return `
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">Review Shopping Cart (${this.cart.length})</div>
-        <div style="flex: 1; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B;">Review Shopping Cart (${this.cart.length})</div>
+          <span style="font-size: 0.65rem; background: #FEF2F2; color: #B91C1C; padding: 2px 8px; border-radius: 10px; font-weight: 800;">⚡ 15-30 Min Dispatch</span>
+        </div>
+
+        <div style="flex: 1; overflow-y: auto; padding-bottom: 20px;">
+          <!-- Cart Items -->
           ${this.cart.map((item, idx) => `
             <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
               <div>
@@ -1221,54 +1326,122 @@ const MobileApp = {
             </div>
           `).join('')}
 
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-top: 12px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Items Subtotal:</span>
-              <span>₦${subtotal.toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Delivery Fee (Express Dispatch):</span>
-              <span>₦${deliveryFee.toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.95rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
-              <span>Total to Pay:</span>
-              <span>₦${total.toLocaleString()}</span>
-            </div>
-          </div>
-
-            <div class="rp-form-group">
-              <label class="rp-label">Delivery Address</label>
-              <input type="text" id="checkout-address" class="rp-input" value="GRA Residential Main Road, Katsina" placeholder="Street, landmark, city" style="border-radius: 10px;">
-              
-              <!-- Quick Saved Delivery Addresses -->
-              <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                <button type="button" onclick="MobileApp.selectSavedAddress('GRA Residential Main Road, Katsina', 12.9820, 7.5950)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏠 Home (GRA)</button>
-                <button type="button" onclick="MobileApp.selectSavedAddress('UMYU University Campus, Katsina', 12.8950, 7.6320)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏫 Campus (UMYU)</button>
-                <button type="button" onclick="MobileApp.selectSavedAddress('Katsina Central Commercial Market', 12.9908, 7.6018)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏬 Market Hub</button>
+          <!-- Temu-Style Consumer Trust & Escrow Guarantee Card -->
+          <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFFBEB 100%); border: 1px solid #FECACA; border-radius: 14px; padding: 12px; margin-top: 10px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+              <span style="font-size: 1.15rem;">🛡️</span>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 900; color: #991B1B;">RushPoint 100% Escrow Guarantee</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 700;">Zero Risk • Delivered Safely or Instant Refund</div>
               </div>
-
-              <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 6px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                📍 Use My Device GPS Location (Auto-Detect)
-              </button>
             </div>
-            <div class="rp-form-group">
-              <label class="rp-label">Customer Phone</label>
-              <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
+            <div style="font-size: 0.68rem; color: #475569; line-height: 1.45;">
+              • <strong>4-Digit Delivery PIN:</strong> Payment remains locked in escrow until you inspect your items and share your PIN.<br>
+              • <strong>Guaranteed On-Time:</strong> Arrives within estimated window or receive ₦300 wallet compensation credit.<br>
+              • <strong>Missing Item Protection:</strong> 100% instant refund for damaged or unavailable products.
             </div>
-
-            <!-- Payment Methods: Flutterwave vs Wallet -->
-            <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Payment Method:</div>
-            
-            <!-- Flutterwave Gateway Button -->
-            <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
-              <span>⚡ Pay ₦${total.toLocaleString()} with Flutterwave</span>
-            </button>
-
-            <!-- RP Wallet Button -->
-            <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
-              <span>👛 Pay with RushPoint Wallet</span>
-            </button>
           </div>
+
+          <!-- Dynamic Distance & Pricing Breakdown -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
+              <span style="color: #64748B;">Items Subtotal (${totalQty} units):</span>
+              <strong>₦${subtotal.toLocaleString()}</strong>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
+              <div>
+                <span>Delivery Fee:</span>
+                <div id="checkout-formula-badge" style="font-size: 0.62rem; color: #059669; font-weight: 700;">Calculated by real road distance${this.cart.length > 1 ? ` (+${((this.cart.length - 1) * 0.2).toFixed(1)}% multi-item)` : ''}${totalQty > 5 ? ' (+4% bulk qty)' : ''}</div>
+              </div>
+              <strong id="checkout-delivery-fee-val" style="color: #B91C1C;">₦${deliveryFee.toLocaleString()}</strong>
+            </div>
+
+            <div id="checkout-distance-badge" style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 6px 10px; font-size: 0.7rem; color: #1E40AF; margin: 8px 0;">
+              🛣️ <strong>${this.deliveryDistanceKm} km</strong> road distance • ~<strong>${this.deliveryDurationMin} mins</strong> arrival
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
+              <span>Total to Pay:</span>
+              <span id="checkout-total-val">₦${total.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <!-- Address & Map Location Alignment -->
+          <div class="rp-form-group" style="margin-bottom: 12px;">
+            <label class="rp-label" style="display: flex; justify-content: space-between;">
+              <span>Delivery Address</span>
+              <span style="font-size: 0.62rem; color: #2563EB; font-weight: 700;">🗺️ Aligns with Live GPS Map</span>
+            </label>
+            <input type="text" id="checkout-address" class="rp-input" value="${this.deliveryAddress}" oninput="MobileApp.onAddressTyped(this.value)" placeholder="Type street, landmark, or area" style="border-radius: 10px;">
+            
+            <!-- Quick Saved Delivery Addresses -->
+            <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+              <button type="button" onclick="MobileApp.selectSavedAddress('GRA Residential Main Road, Katsina', 12.9820, 7.5950)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏠 Home (GRA)</button>
+              <button type="button" onclick="MobileApp.selectSavedAddress('UMYU University Campus, Katsina', 12.8950, 7.6320)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏫 Campus (UMYU)</button>
+              <button type="button" onclick="MobileApp.selectSavedAddress('Katsina Central Commercial Market', 12.9908, 7.6018)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏬 Market Hub</button>
+            </div>
+
+            <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 6px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
+              📍 Use My Device GPS Location (Auto-Detect)
+            </button>
+
+            <!-- Interactive Checkout Mini-Map -->
+            <div style="margin-top: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #64748B; margin-bottom: 4px;">
+                <span>📍 Live Route Pin (Drag pin or click map to adjust dropoff)</span>
+                <span style="color: #059669; font-weight: 700;">Auto-Calculating Fee</span>
+              </div>
+              <div id="checkout-mini-map" style="height: 140px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
+            </div>
+          </div>
+
+          <div class="rp-form-group" style="margin-bottom: 14px;">
+            <label class="rp-label">Customer Contact Phone</label>
+            <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
+          </div>
+
+          <!-- Temu-Style Frequently Bought Together Recommendations -->
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #1E293B;">🔥 Frequently Bought Together</div>
+              <span style="font-size: 0.62rem; color: #EA580C; font-weight: 700;">Save on Combined Delivery</span>
+            </div>
+            <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;">
+              ${recommendedItems.map(rec => `
+                <div style="min-width: 130px; max-width: 130px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 8px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: space-between;">
+                  <div style="position: relative; height: 75px; border-radius: 8px; overflow: hidden; margin-bottom: 6px;">
+                    <img src="${rec.img}" alt="${rec.name}" style="width: 100%; height: 100%; object-fit: cover;">
+                    <span style="position: absolute; top: 4px; left: 4px; background: #EF4444; color: #FFF; font-size: 0.52rem; font-weight: 900; padding: 1px 4px; border-radius: 4px;">${rec.discount}</span>
+                  </div>
+                  <div>
+                    <div style="font-size: 0.68rem; font-weight: 800; color: #1E293B; line-height: 1.2; height: 26px; overflow: hidden;">${rec.name}</div>
+                    <div style="font-size: 0.58rem; color: #64748B; margin-top: 2px;">★ ${rec.rating} • ${rec.sold}</div>
+                    <div style="display: flex; align-items: baseline; gap: 4px; margin-top: 4px;">
+                      <span style="font-size: 0.78rem; font-weight: 900; color: #B91C1C;">₦${rec.price.toLocaleString()}</span>
+                      <span style="font-size: 0.58rem; color: #94A3B8; text-decoration: line-through;">₦${rec.origPrice.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <button onclick="MobileApp.addToCart('${rec.id}', '${rec.name}', ${rec.price}, '${rec.store_id}'); MobileApp.updateLiveDeliveryQuote();" style="width: 100%; margin-top: 6px; background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; padding: 5px 0; border-radius: 8px; font-size: 0.65rem; font-weight: 800; cursor: pointer;">
+                    + Add to Cart
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Payment Methods: Flutterwave vs Wallet -->
+          <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Payment Method:</div>
+          
+          <!-- Flutterwave Gateway Button -->
+          <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
+            <span id="flw-pay-btn-text">⚡ Pay ₦${total.toLocaleString()} with Flutterwave</span>
+          </button>
+
+          <!-- RP Wallet Button -->
+          <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
+            <span>👛 Pay with RushPoint Wallet</span>
+          </button>
         </div>
       </div>
     `;
@@ -1560,6 +1733,15 @@ const MobileApp = {
               ` : ''}
             </div>
 
+            <!-- Live Interactive Radar Map -->
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-bottom: 4px;">
+                <span style="font-weight: 800; color: #1E293B;">🗺️ Live GPS Courier Radar</span>
+                <span style="background: #ECFDF5; color: #059669; font-weight: 800; padding: 1px 6px; border-radius: 6px;">⏱️ ~14 mins ETA</span>
+              </div>
+              <div id="order-radar-map" style="height: 160px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
+            </div>
+
             <div style="font-weight: 800; font-size: 0.8rem; margin-bottom: 8px; color: #1E293B;">Milestone Timeline</div>
             <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 180px; overflow-y: auto;">
               ${timeline.map(t => `
@@ -1574,6 +1756,58 @@ const MobileApp = {
         </div>
       `;
       document.body.appendChild(modal);
+
+      setTimeout(() => {
+        const mapEl = document.getElementById('order-radar-map');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        const storeLat = o.store_lat || 12.9908;
+        const storeLng = o.store_lng || 7.6018;
+        const destLat = o.delivery_lat || 12.9820;
+        const destLng = o.delivery_lng || 7.5950;
+
+        let riderLat = storeLat;
+        let riderLng = storeLng;
+        const sUpper = (o.status || '').toUpperCase();
+        if (sUpper === 'IN_TRANSIT' || sUpper === 'PICKED_UP') {
+          riderLat = (storeLat + destLat) / 2 + 0.0015;
+          riderLng = (storeLng + destLng) / 2 + 0.0015;
+        } else if (sUpper === 'DELIVERED') {
+          riderLat = destLat;
+          riderLng = destLng;
+        }
+
+        const map = L.map('order-radar-map', { zoomControl: false, attributionControl: false }).setView([(storeLat + destLat)/2, (storeLng + destLng)/2], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+        const storeIcon = L.divIcon({
+          html: '<div style="background:#7F1D1D;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
+          iconSize: [24, 24], iconAnchor: [12, 12]
+        });
+        L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map).bindPopup(`<b>${o.store_name}</b><br>Store Pickup`);
+
+        const custIcon = L.divIcon({
+          html: '<div style="background:#059669;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
+          iconSize: [24, 24], iconAnchor: [12, 12]
+        });
+        L.marker([destLat, destLng], { icon: custIcon }).addTo(map).bindPopup(`<b>Your Dropoff Point</b><br>${o.delivery_address}`);
+
+        if (sUpper !== 'PENDING' && sUpper !== 'CANCELLED') {
+          const bikeIcon = L.divIcon({
+            html: '<div style="background:#F59E0B;color:#000;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #FFF;box-shadow:0 0 10px rgba(245,158,11,0.8);">🛵</div>',
+            iconSize: [28, 28], iconAnchor: [14, 14]
+          });
+          L.marker([riderLat, riderLng], { icon: bikeIcon }).addTo(map).bindPopup(`<b>${o.rider_name || 'Assigned Courier'}</b><br>Live GPS Radar`);
+        }
+
+        L.polyline([[storeLat, storeLng], [riderLat, riderLng], [destLat, destLng]], {
+          color: '#B91C1C', weight: 3, dashArray: '4, 6', opacity: 0.85
+        }).addTo(map);
+
+        try {
+          map.fitBounds([[storeLat, storeLng], [destLat, destLng]], { padding: [20, 20] });
+        } catch(e){}
+      }, 150);
     } catch (e) {}
   },
 
