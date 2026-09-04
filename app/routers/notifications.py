@@ -114,3 +114,53 @@ def get_whatsapp_share_link(
         "whatsapp_url": generate_whatsapp_url(recipient_phone, message),
         "message": message
     }
+
+
+@router.post("/broadcast")
+def broadcast_notification(payload: dict, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Operations Manager"]))):
+    """
+    Admin Broadcast Notification:
+    Pushes an in-app system notification to ALL users, or filtered to:
+    'CUSTOMERS', 'VENDORS', 'RIDERS', or 'ALL'.
+    """
+    title = str(payload.get("title", "")).strip()
+    message = str(payload.get("message", "")).strip()
+    target = str(payload.get("target", "ALL")).upper() # ALL, CUSTOMERS, VENDORS, RIDERS
+    category = str(payload.get("category", "ANNOUNCEMENT")).upper()
+    sound_type = str(payload.get("sound_type", "announcement"))
+
+    if not title or not message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title and message are required.")
+
+    conn = get_db_connection()
+    query = "SELECT id, account_type FROM users WHERE status = 'ACTIVE'"
+    if target == "CUSTOMERS":
+        query += " AND account_type = 'CUSTOMER'"
+    elif target == "VENDORS":
+        query += " AND account_type = 'VENDOR'"
+    elif target == "RIDERS":
+        query += " AND account_type = 'RIDER'"
+    
+    users = conn.execute(query).fetchall()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    records = []
+    for u in users:
+        records.append((str(uuid.uuid4()), u["id"], title, message, category, 0, now_iso))
+
+    if records:
+        conn.executemany("""
+            INSERT INTO notifications (id, user_id, title, message, category, is_read, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, records)
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "sent_count": len(records),
+        "target": target,
+        "message": f"Broadcast successfully dispatched to {len(records)} active {target.lower()}."
+    }
+

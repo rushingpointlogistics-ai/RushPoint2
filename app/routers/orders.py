@@ -624,3 +624,88 @@ def admin_confirm_delivery(order_id: str, payload: dict = {}, current_user: dict
         "message": f"Order {ord_row['order_ref']} confirmed DELIVERED! Rider commission released to rider wallet.",
         "status": "DELIVERED"
     }
+
+
+@router.post("/bulk-confirm-delivery")
+def bulk_confirm_delivery(payload: dict = {}, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Operations Manager", "Dispatcher"]))):
+    """
+    Bulk Proof-of-Delivery Confirmation:
+    Admin can confirm all orders currently in 'ARRIVED' or 'IN_TRANSIT' (or specific order_ids)
+    in one single action. Automatically clears settlements and disburses rider earnings.
+    """
+    order_ids = payload.get("order_ids", [])
+    notes = payload.get("notes", "Admin bulk POD verification")
+
+    conn = get_db_connection()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if order_ids:
+        placeholders = ",".join(["?"] * len(order_ids))
+        orders = conn.execute(f"SELECT * FROM orders WHERE id IN ({placeholders}) AND status != 'DELIVERED'", tuple(order_ids)).fetchall()
+    else:
+        # Confirm all arrived / in-transit orders
+        orders = conn.execute("SELECT * FROM orders WHERE status IN ('ARRIVED', 'IN_TRANSIT')").fetchall()
+
+    confirmed_count = 0
+    total_disbursed = 0.0
+
+    for ord_row in orders:
+        order_id = ord_row["id"]
+        # Update order status
+        conn.execute("UPDATE orders SET status = 'DELIVERED', updated_at = ? WHERE id = ?", (now_iso, order_id))
+
+        # Clear financial settlement & credit rider
+        settlement = conn.execute("SELECT * FROM financial_settlements WHERE order_id = ?", (order_id,)).fetchone()
+        if settlement and settlement["status"] == "ESCROW_HELD":
+            conn.execute("UPDATE financial_settlements SET status = 'CLEARED' WHERE id = ?", (settlement["id"],))
+
+            if ord_row["rider_id"]:
+                rider = conn.execute("SELECT r.*, u.id as user_id, u.full_name FROM riders r JOIN users u ON r.user_id = u.id WHERE r.id = ?", (ord_row["rider_id"],)).fetchone()
+                if rider:
+                    earning = settlement["rider_earnings"]
+                    total_disbursed += earning
+
+                    # Credit Rider Wallet
+                    r_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (rider["user_id"],)).fetchone()
+                    if r_wallet:
+                        new_r_bal = r_wallet["balance"] + earning
+                        conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_r_bal, now_iso, r_wallet["id"]))
+                        conn.execute("""
+                            INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+                        """, (str(uuid.uuid4()), r_wallet["id"], rider["user_id"], f"RP-TXN-RDR-{ord_row['order_ref']}", earning, f"Bulk Delivery Confirmation ({rider['rider_type']})", new_r_bal, now_iso))
+
+                    # Deduct from Admin Escrow Holding
+                    admin_user = conn.execute("SELECT id FROM users WHERE account_type = 'ADMIN' LIMIT 1").fetchone()
+                    if admin_user:
+                        adm_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (admin_user["id"],)).fetchone()
+                        if adm_wallet:
+                            adm_new_bal = adm_wallet["balance"] - earning
+                            conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (adm_new_bal, now_iso, adm_wallet["id"]))
+
+                    conn.execute("""
+                        UPDATE riders
+                        SET operational_status = 'AVAILABLE',
+                            total_deliveries = total_deliveries + 1,
+                            updated_at = ?
+                        WHERE id = ?
+                    """, (now_iso, ord_row["rider_id"]))
+
+        # Record Timeline Event
+        conn.execute("""
+            INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+            VALUES (?, ?, ?, 'DELIVERED', ?, 'Admin Bulk Verification', ?, ?)
+        """, (str(uuid.uuid4()), order_id, ord_row["status"], current_user["id"], f"{notes}. Commission released to rider wallet.", now_iso))
+
+        confirmed_count += 1
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "confirmed_count": confirmed_count,
+        "total_disbursed_ngn": total_disbursed,
+        "message": f"Successfully bulk-verified {confirmed_count} deliveries. Disbursed ₦{total_disbursed:,.2f} to couriers."
+    }
+

@@ -2099,6 +2099,7 @@ const MobileApp = {
     const completedOrders = orders.filter(o => o.status === 'DELIVERED');
     const inTransitOrders = orders.filter(o => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'].includes(o.status));
     const activeOrders = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status));
+    const lowStockProducts = products.filter(p => (p.stock_qty || 0) <= 5);
 
     // Start background polling so the phone rings on new orders (zero cost — browser only)
     this.startVendorOrderPolling();
@@ -2120,6 +2121,11 @@ const MobileApp = {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
+            ${lowStockProducts.length > 0 ? `
+              <button onclick="MobileApp.vendorActiveTab = 'products'; MobileApp.render();" style="background: #FEF3C7; border: 1.5px solid #F59E0B; color: #B45309; padding: 5px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="${lowStockProducts.length} product(s) have 5 or fewer items remaining!">
+                ⚠️ Stock (${lowStockProducts.length})
+              </button>
+            ` : ''}
             <button onclick="MobileApp.testAndUnlockVendorAudio()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;" title="Test and prime device speaker so it rings loudly on orders">
               🔔 Sound Test
             </button>
@@ -2315,6 +2321,24 @@ const MobileApp = {
           </div>
         </div>
 
+        <!-- Low-Stock Alert Banner -->
+        ${products.filter(p => (p.stock_qty || 0) <= 5).length > 0 ? `
+          <div style="background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.3rem;">⚠️</span>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 800; color: #92400E;">
+                  Low-Stock Warning: ${products.filter(p => (p.stock_qty || 0) <= 5).length} item(s) low!
+                </div>
+                <div style="font-size: 0.68rem; color: #78350F;">Items have 5 or fewer units left. Restock now to prevent missed orders.</div>
+              </div>
+            </div>
+            <button onclick="MobileApp.vendorActiveTab = 'products'; MobileApp.render();" class="btn-primary btn-sm" style="background: #D97706; font-size: 0.68rem; font-weight: 800; white-space: nowrap; padding: 6px 10px; border-radius: 8px;">
+              Restock 📦
+            </button>
+          </div>
+        ` : ''}
+
         <!-- 1. Orders Requiring Preparation -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <div style="font-size: 0.85rem; font-weight: 800; color: #1E293B;">Store Orders (${activeOrders.length})</div>
@@ -2445,8 +2469,10 @@ const MobileApp = {
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            ${products.map(p => `
-              <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+            ${products.map(p => {
+              const isLow = (p.stock_qty || 0) <= 5;
+              return `
+              <div style="background: ${isLow ? '#FFFDF5' : '#FFF'}; border: 1.5px solid ${isLow ? '#FCD34D' : '#E2E8F0'}; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="checkbox" class="vnd-prod-cb" value="${p.id}" onchange="MobileApp.updateVendorSelectionBar()">
@@ -2460,26 +2486,31 @@ const MobileApp = {
                       </div>
                     </div>
                   </div>
-                  <span class="badge badge-${p.status.toLowerCase()}" style="font-size: 0.58rem;">${p.status}</span>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="badge badge-${p.status.toLowerCase()}" style="font-size: 0.58rem;">${p.status}</span>
+                    ${isLow ? `<span class="badge" style="background: #FEF3C7; color: #92400E; font-size: 0.58rem; font-weight: 800; border: 1px solid #FCD34D;">⚠️ Low (${p.stock_qty})</span>` : ''}
+                  </div>
                 </div>
 
                 <!-- Stock & Actions Row -->
                 <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F1F5F9; padding-top: 8px;">
                   <div style="font-size: 0.72rem; color: #64748B;">
-                    Stock: <strong style="color: ${p.stock_qty > 0 ? '#1E293B' : 'red'}; font-size: 0.82rem;">${p.stock_qty}</strong>
+                    Stock: <strong style="color: ${p.stock_qty > 5 ? '#1E293B' : (p.stock_qty > 0 ? '#D97706' : 'red')}; font-size: 0.82rem;">${p.stock_qty}</strong>
                   </div>
                   <div style="display: flex; gap: 4px; align-items: center;">
                     <button onclick="MobileApp.toggleProductQuickStock('${p.id}', ${p.stock_qty > 0 ? 0 : 10})" class="btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; cursor: pointer; background: ${p.stock_qty > 0 ? '#DCFCE7' : '#FEF2F2'}; color: ${p.stock_qty > 0 ? '#15803D' : '#DC2626'}; border: 1px solid ${p.stock_qty > 0 ? '#86EFAC' : '#FCA5A5'};" title="Toggle active/out-of-stock">
                       ${p.stock_qty > 0 ? 'Pause ✕' : 'Resume ✓'}
                     </button>
                     <button onclick="MobileApp.quickUpdateStock('${p.id}', Math.max(0, ${p.stock_qty} - 1))" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;" title="Reduce 1 stock">-1</button>
-                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 5)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800;" title="Add 5 stock">+5</button>
+                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 5)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; ${isLow ? 'background:#FEF3C7;border-color:#FCD34D;' : ''}" title="Add 5 stock">+5</button>
+                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 10)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; ${isLow ? 'background:#DCFCE7;border-color:#86EFAC;' : ''}" title="Add 10 stock">+10</button>
                     <button onclick="MobileApp.showVendorEditProductModal('${p.id}')" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">✏️ Edit</button>
                     <button onclick="MobileApp.deleteVendorProduct('${p.id}', '${p.name.replace(/'/g, "\\'")}')" class="btn-danger btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;">🗑️</button>
                   </div>
                 </div>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
         </div>
       `;
@@ -3000,11 +3031,14 @@ const MobileApp = {
     let profile = null;
     let wallet = { balance: 0.0 };
 
+    let earningsData = null;
     try {
       const res = await API.get("/api/riders/profile", { silent: true });
       if (res) profile = res;
       const wRes = await API.get("/api/finance/wallet/me", { silent: true });
       if (wRes && wRes.wallet) wallet = wRes.wallet;
+      const eaRes = await API.get("/api/riders/earnings-analytics", { silent: true });
+      if (eaRes && eaRes.success) earningsData = eaRes;
     } catch (e) {}
 
     const rider = profile?.rider;
@@ -3057,7 +3091,7 @@ const MobileApp = {
         </div>
 
         <div class="mobile-content-area">
-          ${this.getRiderTabHtml(activeOrder, rider, wallet, user)}
+          ${this.getRiderTabHtml(activeOrder, rider, wallet, user, earningsData)}
         </div>
 
         <!-- Rider 3-Tab Bottom Navigation -->
@@ -3238,7 +3272,7 @@ const MobileApp = {
     }
   },
 
-  getRiderTabHtml(activeOrder, rider, wallet, user) {
+  getRiderTabHtml(activeOrder, rider, wallet, user, earningsData = null) {
     if (this.riderActiveTab === "mission") {
       return `
         <!-- Rider Earnings Card — Darklight Blood / Maroon Theme -->
@@ -3319,28 +3353,134 @@ const MobileApp = {
     }
 
     if (this.riderActiveTab === "earnings") {
+      const isExternal = earningsData ? earningsData.is_external : (rider?.rider_type !== 'INTERNAL');
+      const todayEarnings = earningsData?.today_earnings || 0;
+      const weeklyEarnings = earningsData?.weekly_earnings || 0;
+      const totalDeliveries = earningsData?.total_deliveries || rider?.total_deliveries || 0;
+      const rating = earningsData?.rating || rider?.rating || 5.0;
+      const dailyBreakdown = earningsData?.daily_breakdown || [];
+      const recentTrips = earningsData?.recent_trips || [];
+
+      // Find max daily earning for CSS bar scaling
+      const maxDaily = Math.max(...dailyBreakdown.map(d => d.earnings), 1000);
+
       return `
         <div>
-          <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">💰 Rider Earnings & Wallet</div>
-          
-          <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2);">
-            <div style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">Available Balance</div>
-            <div style="font-size: 1.65rem; font-weight: 900; margin: 4px 0 10px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B;">💰 Courier Earnings & Performance</div>
+            <span class="badge" style="background: ${isExternal ? '#2563EB' : '#059669'}; color: #FFF; font-size: 0.62rem; font-weight: 800;">
+              ${isExternal ? '🤝 EXTERNAL PARTNER' : '🏢 COMPANY FLEET'}
+            </span>
+          </div>
+
+          <!-- Primary Wallet Balance Card -->
+          <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2); margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">Available Balance</span>
+              <span style="background: rgba(255,255,255,0.18); color: #FFF; font-size: 0.62rem; padding: 2px 8px; border-radius: 10px; font-weight: 800;">Escrow Cleared</span>
+            </div>
+            <div style="font-size: 1.85rem; font-weight: 900; margin: 4px 0 10px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
               ₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
             </div>
-            <button onclick="MobileApp.showWithdrawalModal(${wallet.balance}, 'Access Bank', '0691128394', '${user.full_name}')" style="background: #FFF; color: #7F1D1D; border: none; width: 100%; padding: 9px; border-radius: 10px; font-weight: 900; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
-              💳 Withdraw Earnings to Bank
+            <button onclick="MobileApp.showWithdrawalModal(${wallet.balance}, 'Access Bank', '0691128394', '${user.full_name}')" style="background: #FFF; color: #7F1D1D; border: none; width: 100%; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+              💳 Withdraw Earnings to Bank Account
             </button>
           </div>
 
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px;">
-            <div style="font-weight: 800; font-size: 0.82rem; color: #1E293B; margin-bottom: 6px;">Commission Model</div>
-            <div style="font-size: 0.75rem; color: #64748B;">
-              ${rider?.rider_type === 'INTERNAL' ? 
-                '🏢 <strong>Internal Company Fleet</strong>: Transport fee retained for company asset operations.' : 
-                '🤝 <strong>External Partner</strong>: You receive your configured % commission split automatically on every verified delivery.'}
+          ${isExternal ? `
+            <!-- Performance KPI Cards (External Partner) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Today's Payouts</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #059669; margin-top: 2px;">₦${todayEarnings.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">${earningsData?.today_deliveries || 0} trips today</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">This Week (7 Days)</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #2563EB; margin-top: 2px;">₦${weeklyEarnings.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">Cleared commissions</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Total Deliveries</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #1E293B; margin-top: 2px;">${totalDeliveries}</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 700;">Completed trips</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Customer Rating</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #D97706; margin-top: 2px;">⭐ ${rating.toFixed(1)}</div>
+                <div style="font-size: 0.62rem; color: #D97706; font-weight: 700;">Top Courier Tier</div>
+              </div>
             </div>
-          </div>
+
+            <!-- 7-Day Visual Earnings Bar Chart (Pure CSS) -->
+            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px; margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B;">📊 Past 7 Days Earnings Trend</div>
+                <span style="font-size: 0.68rem; color: #059669; font-weight: 800;">Week: ₦${weeklyEarnings.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 90px; padding: 0 4px; border-bottom: 1px solid #F1F5F9; margin-bottom: 6px;">
+                ${dailyBreakdown.map(d => {
+                  const pct = Math.max(8, Math.round((d.earnings / maxDaily) * 100));
+                  return `
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                      <span style="font-size: 0.55rem; color: #64748B; font-weight: 700;">${d.earnings > 0 ? `₦${Math.round(d.earnings / 1000)}k` : ''}</span>
+                      <div style="width: 18px; height: ${pct}%; background: ${d.earnings > 0 ? 'linear-gradient(180deg, #2563EB, #60A5FA)' : '#E2E8F0'}; border-radius: 4px 4px 0 0;" title="${d.date}: ₦${d.earnings.toLocaleString()} (${d.deliveries} trips)"></div>
+                      <span style="font-size: 0.62rem; font-weight: 700; color: #475569;">${d.day}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- Recent Delivery Trips Breakdown -->
+            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px; margin-bottom: 14px;">
+              <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 10px;">🛵 Recent Delivery Payouts</div>
+              ${recentTrips.length === 0 ? `
+                <div style="font-size: 0.72rem; color: #64748B; text-align: center; padding: 10px;">
+                  No completed delivery trips recorded yet. Stay online to receive missions!
+                </div>
+              ` : `
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${recentTrips.slice(0, 5).map(t => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F1F5F9; padding-bottom: 6px;">
+                      <div>
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B;">${t.order_ref}</div>
+                        <div style="font-size: 0.65rem; color: #64748B;">🏪 ${t.store_name} • ${new Date(t.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                      </div>
+                      <div style="text-align: right;">
+                        <div style="font-size: 0.82rem; font-weight: 900; color: #059669;">+₦${(t.rider_earnings || t.delivery_fee * 0.8 || 800).toLocaleString()}</div>
+                        <div style="font-size: 0.6rem; color: #64748B;">80% Commission</div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          ` : `
+            <!-- Internal Company Salaried Fleet Courier Notice -->
+            <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 16px; padding: 16px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 1.4rem;">🏢</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.88rem; color: #166534;">RushPoint Corporate Fleet Courier</div>
+                  <div style="font-size: 0.68rem; color: #15803D;">Fixed Salaried Staff • Katsina Logistics Operations Hub</div>
+                </div>
+              </div>
+              <div style="font-size: 0.74rem; color: #166534; line-height: 1.4; margin-bottom: 12px;">
+                As an internal company courier, you are on <strong>guaranteed monthly company payroll</strong>. Individual trip delivery fees are collected directly by RushPoint to cover corporate fleet fueling, maintenance, insurance, and company motorcycle servicing.
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                  <div style="font-size: 0.65rem; color: #64748B;">Deliveries Completed</div>
+                  <div style="font-size: 1.15rem; font-weight: 900; color: #166534;">${totalDeliveries}</div>
+                </div>
+                <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                  <div style="font-size: 0.65rem; color: #64748B;">Fleet Star Rating</div>
+                  <div style="font-size: 1.15rem; font-weight: 900; color: #D97706;">⭐ ${rating.toFixed(1)}</div>
+                </div>
+              </div>
+            </div>
+          `}
         </div>
       `;
     }

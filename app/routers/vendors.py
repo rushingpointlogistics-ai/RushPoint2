@@ -212,3 +212,43 @@ def get_store_by_slug(slug: str):
         "store": dict(store),
         "products": [dict(p) for p in products]
     }
+
+
+@router.get("/low-stock-alert")
+def get_vendor_low_stock_alerts(current_user: dict = Depends(get_current_user)):
+    """
+    Vendor Inventory Low-Stock Alert:
+    Returns any product for the vendor's store with stock_qty <= 5.
+    """
+    if current_user.get("account_type") != "VENDOR":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only vendors can check low-stock alerts.")
+    
+    conn = get_db_connection()
+    vendor = conn.execute("SELECT id FROM vendors WHERE user_id = ?", (current_user["id"],)).fetchone()
+    if not vendor:
+        conn.close()
+        return {"success": True, "low_stock_count": 0, "products": []}
+        
+    store = conn.execute("SELECT id, store_name FROM stores WHERE vendor_id = ?", (vendor["id"],)).fetchone()
+    if not store:
+        conn.close()
+        return {"success": True, "low_stock_count": 0, "products": []}
+
+    rows = conn.execute("""
+        SELECT p.id, p.name, p.sku, p.price, p.stock_qty, p.image_url, c.name as category_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.store_id = ? AND p.stock_qty <= 5 AND p.status != 'DISABLED'
+        ORDER BY p.stock_qty ASC
+    """, (store["id"],)).fetchall()
+    conn.close()
+
+    items = [dict(r) for r in rows]
+    return {
+        "success": True,
+        "store_id": store["id"],
+        "store_name": store["store_name"],
+        "low_stock_count": len(items),
+        "products": items
+    }
+

@@ -138,6 +138,9 @@ const AdminPortal = {
             </div>
 
             <div style="display: flex; align-items: center; gap: 14px;">
+              <button onclick="AdminPortal.showBroadcastModal()" style="display: inline-flex; align-items: center; gap: 6px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; border-radius: 10px; padding: 7px 12px; font-size: 0.78rem; font-weight: 800; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#E0E7FF'" onmouseout="this.style.background='#EEF2FF'">
+                📢 Broadcast
+              </button>
               <div style="text-align: right;">
                 <div style="font-size: 0.85rem; font-weight: 800; color: #1E293B;">${user.full_name || 'Super Administrator'}</div>
                 <div style="font-size: 0.72rem; color: #64748B;">${user.email || 'admin@rushingpoint.com'} • <strong style="color: #B91C1C;">${roleBadge}</strong></div>
@@ -2088,6 +2091,9 @@ const AdminPortal = {
             <div class="admin-page-desc">Customer Payment → Vendor Net (100% Product Price) + Rider Split (Internal Fleet vs External Commission) + Admin Retained Delivery Earnings</div>
           </div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button onclick="AdminPortal.showOfflineRiderPayoutSelectorModal()" class="btn-primary btn-sm" style="background: #D97706; font-weight: 800;" title="Disburse cash or direct bank transfer for riders who don't have smartphones">
+              🛵 Disburse Offline Rider Payout
+            </button>
             <button onclick="AdminPortal.showManualPayoutModal()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800;">
               💸 + New Manual Payout
             </button>
@@ -3249,8 +3255,13 @@ const AdminPortal = {
 
         <!-- Active Orders in Transit -->
         <div class="rp-card">
-          <div class="rp-card-header">
+          <div class="rp-card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div class="rp-card-title" style="color:#2563EB;">🛵 Orders In Transit & Active Missions (${activeOrders.length})</div>
+            ${activeOrders.length > 0 ? `
+              <button onclick="AdminPortal.bulkConfirmActiveDeliveries()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800; font-size: 0.72rem; padding: 5px 12px; border-radius: 8px;" title="Approve and verify all active deliveries at once — releases funds to couriers">
+                ⚡ Bulk Verify Deliveries (${activeOrders.length})
+              </button>
+            ` : ''}
           </div>
           <div class="rp-table-container">
             <table class="rp-table">
@@ -4683,6 +4694,195 @@ const AdminPortal = {
     }
   },
 
+  showBroadcastModal() {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 480px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: #312E81; display: flex; align-items: center; gap: 8px;">
+            <span>📢</span> Admin Broadcast Notification Center
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.75rem; color: #3730A3;">
+          Push an immediate system notification with sound chime to all users or target specific user groups.
+        </div>
+
+        <form onsubmit="AdminPortal.sendBroadcastNotification(event)">
+          <div class="rp-form-group">
+            <label class="rp-label">Target Audience</label>
+            <select id="bc-target" class="rp-select" style="font-weight: 700;">
+              <option value="ALL">👥 All Platform Users (Everyone)</option>
+              <option value="CUSTOMERS">🛍️ All Customers Only</option>
+              <option value="VENDORS">🏪 All Store Merchants & Vendors Only</option>
+              <option value="RIDERS">🛵 All Delivery Couriers & Riders Only</option>
+            </select>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Notification Title</label>
+            <input type="text" id="bc-title" class="rp-input" placeholder="e.g. Katsina Festive Rush Notice / Fuel Surcharge Update" required>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Broadcast Message</label>
+            <textarea id="bc-message" class="rp-textarea" rows="4" placeholder="Write your broadcast announcement..." required></textarea>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 16px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #4338CA; border-color: #3730A3; font-weight: 800;">
+              🚀 Send Broadcast Alert
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async sendBroadcastNotification(e) {
+    e.preventDefault();
+    const target = document.getElementById("bc-target").value;
+    const title = document.getElementById("bc-title").value.trim();
+    const message = document.getElementById("bc-message").value.trim();
+
+    if (!title || !message) {
+      API.showToast("Title and message are required", "error");
+      return;
+    }
+
+    try {
+      const res = await API.post("/api/notifications/broadcast", { target, title, message });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || `Broadcast sent to ${res.sent_count} users!`, "success");
+    } catch (err) {
+      API.showToast(err.message || "Failed to send broadcast", "error");
+    }
+  },
+
+  async bulkConfirmActiveDeliveries() {
+    if (!confirm("Bulk-verify ALL active and arrived deliveries now? This will mark them DELIVERED, release escrow settlements, and credit courier wallets.")) return;
+    try {
+      const res = await API.post("/api/orders/bulk-confirm-delivery", {});
+      API.showToast(res.message || `Verified ${res.confirmed_count} deliveries!`, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to bulk-verify deliveries", "error");
+    }
+  },
+
+  async showOfflineRiderPayoutSelectorModal() {
+    try {
+      const res = await API.get("/api/riders/");
+      const riders = res?.riders || [];
+
+      const modal = document.createElement("div");
+      modal.className = "modal-backdrop rp-modal-overlay";
+      modal.innerHTML = `
+        <div class="modal-dialog" style="max-width: 480px; border-radius: 18px;">
+          <div class="modal-header">
+            <h3 style="font-size: 1.1rem; font-weight: 800; color: #92400E; display: flex; align-items: center; gap: 8px;">
+              <span>🛵</span> Disburse Offline Rider Payout
+            </h3>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+          </div>
+
+          <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #78350F;">
+            Withdraw and disburse cash or direct bank transfer on behalf of riders with basic button phones (Nokia/itel) who lack smartphone access.
+          </div>
+
+          <form onsubmit="AdminPortal.handleOfflineRiderPayoutSubmit(event)">
+            <div class="rp-form-group">
+              <label class="rp-label">Select Rider</label>
+              <select id="adm-offline-rdr-select" class="rp-select" onchange="AdminPortal.onOfflineRiderSelected(this)" required>
+                <option value="">-- Choose Rider --</option>
+                ${riders.map(r => `
+                  <option value="${r.id}" data-name="${r.full_name}" data-balance="${r.wallet_balance || 0}" data-ref="${r.rider_ref}">
+                    ${r.full_name} (${r.rider_ref} - ₦${(r.wallet_balance || 0).toLocaleString()})
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div id="adm-offline-rdr-balance-box" style="display: none; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px; margin-bottom: 12px; font-size: 0.78rem;">
+              <div>Available Earned Balance: <strong id="adm-offline-rdr-bal" style="color: #059669; font-size: 1rem;">₦0</strong></div>
+            </div>
+
+            <div class="rp-form-group">
+              <label class="rp-label">Disbursement Amount (NGN)</label>
+              <input type="number" id="adm-offline-rdr-amount" class="rp-input" min="100" placeholder="e.g. 5000" required>
+            </div>
+
+            <div class="rp-form-group">
+              <label class="rp-label">Disbursement Channel / Receipt Note</label>
+              <input type="text" id="adm-offline-rdr-note" class="rp-input" value="Cash Handover at Katsina Hub Dispatch Counter" required>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 16px;">
+              <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+                Cancel
+              </button>
+              <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #D97706; border-color: #B45309; font-weight: 800;">
+                💸 Disburse Payout Now
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch (e) {
+      API.showToast("Could not load riders list", "error");
+    }
+  },
+
+  onOfflineRiderSelected(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const balBox = document.getElementById("adm-offline-rdr-balance-box");
+    const balEl = document.getElementById("adm-offline-rdr-bal");
+    const amtInput = document.getElementById("adm-offline-rdr-amount");
+    if (!opt || !opt.value) {
+      if (balBox) balBox.style.display = "none";
+      return;
+    }
+    const bal = parseFloat(opt.getAttribute("data-balance") || 0);
+    if (balBox) balBox.style.display = "block";
+    if (balEl) balEl.innerText = `₦${bal.toLocaleString()}`;
+    if (amtInput) {
+      amtInput.value = bal;
+      amtInput.max = bal;
+    }
+  },
+
+  async handleOfflineRiderPayoutSubmit(e) {
+    e.preventDefault();
+    const selectEl = document.getElementById("adm-offline-rdr-select");
+    const riderId = selectEl.value;
+    const amount = parseFloat(document.getElementById("adm-offline-rdr-amount").value);
+    const bank_account = document.getElementById("adm-offline-rdr-note").value.trim();
+
+    if (!riderId || !amount || amount <= 0) {
+      API.showToast("Please select a rider and valid amount", "error");
+      return;
+    }
+
+    try {
+      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, { amount, bank_account });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Payout disbursed successfully!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (err) {
+      API.showToast(err.message || "Payout disbursement failed", "error");
+    }
+  },
+
 };
+
 
 window.AdminPortal = AdminPortal;

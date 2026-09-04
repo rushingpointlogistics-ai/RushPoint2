@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.database import get_db_connection
 from app.security import get_current_user, require_role, log_audit
@@ -339,3 +339,81 @@ def update_operational_status(payload: dict, current_user: dict = Depends(get_cu
     conn.commit()
     conn.close()
     return {"success": True, "operational_status": status_val}
+
+
+@router.get("/earnings-analytics")
+def get_rider_earnings_analytics(current_user: dict = Depends(get_current_user)):
+    """
+    Rider Earnings Analytics Dashboard:
+    Computes daily/weekly earnings, delivery count, rating, and trip history.
+    Differentiates between EXTERNAL_PARTNER (commission based) and INTERNAL (company salaried).
+    """
+    if current_user.get("account_type") != "RIDER":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only riders can access earnings analytics.")
+
+    conn = get_db_connection()
+    rider = conn.execute("SELECT * FROM riders WHERE user_id = ?", (current_user["id"],)).fetchone()
+    if not rider:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rider record not found.")
+
+    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
+    wallet_balance = wallet["balance"] if wallet else 0.0
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # 1. Today's earnings
+    today_earn_row = conn.execute("""
+        SELECT COALESCE(SUM(amount), 0) as today_earnings, COUNT(*) as today_trips
+        FROM wallet_transactions
+        WHERE user_id = ? AND type = 'CREDIT' AND created_at LIKE ?
+    """, (current_user["id"], f"{today_str}%")).fetchone()
+
+    # 2. Past 7 days breakdown
+    daily_breakdown = []
+    for i in range(6, -1, -1):
+        day_date = datetime.now(timezone.utc) - timedelta(days=i)
+        day_prefix = day_date.strftime("%Y-%m-%d")
+        day_name = day_date.strftime("%a")
+        day_row = conn.execute("""
+            SELECT COALESCE(SUM(amount), 0) as day_earnings, COUNT(*) as day_count
+            FROM wallet_transactions
+            WHERE user_id = ? AND type = 'CREDIT' AND created_at LIKE ?
+        """, (current_user["id"], f"{day_prefix}%")).fetchone()
+        daily_breakdown.append({
+            "date": day_prefix,
+            "day": day_name,
+            "earnings": float(day_row["day_earnings"] or 0),
+            "deliveries": int(day_row["day_count"] or 0)
+        })
+
+    weekly_total = sum(d["earnings"] for d in daily_breakdown)
+
+    # 3. Recent completed trips
+    recent_trips = conn.execute("""
+        SELECT o.id, o.order_ref, o.delivery_fee, o.total_amount, o.updated_at,
+               s.store_name, fs.rider_earnings
+        FROM orders o
+        JOIN stores s ON o.store_id = s.id
+        LEFT JOIN financial_settlements fs ON fs.order_id = o.id
+        WHERE o.rider_id = ? AND o.status = 'DELIVERED'
+        ORDER BY o.updated_at DESC
+        LIMIT 10
+    """, (rider["id"],)).fetchall()
+
+    conn.close()
+
+    return {
+        "success": True,
+        "rider_type": rider["rider_type"],
+        "is_external": rider["rider_type"] != "INTERNAL",
+        "total_deliveries": rider["total_deliveries"] or 0,
+        "rating": float(rider["rating"] or 5.0),
+        "wallet_balance": wallet_balance,
+        "today_earnings": float(today_earn_row["today_earnings"] or 0),
+        "today_deliveries": int(today_earn_row["today_trips"] or 0),
+        "weekly_earnings": weekly_total,
+        "daily_breakdown": daily_breakdown,
+        "recent_trips": [dict(t) for t in recent_trips]
+    }
+
