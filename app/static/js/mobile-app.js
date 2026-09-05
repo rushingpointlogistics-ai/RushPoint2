@@ -30,6 +30,8 @@ const MobileApp = {
   geocodeDebounceTimer: null,
 
   init() {
+    // Auto-detect if user just returned from Flutterwave payment
+    this.checkAndProcessTopupReturn();
     this.render();
   },
 
@@ -1642,8 +1644,8 @@ const MobileApp = {
     if (overlay) overlay.innerHTML = `
       <div class="modal-dialog" style="max-width: 320px; text-align: center; padding: 24px; border-radius: 20px;">
         <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
-        <div style="font-size: 1rem; font-weight: 900; color: #1E293B; margin-bottom: 6px;">Processing Transaction...</div>
-        <div style="font-size: 0.75rem; color: #64748B;">Connecting to Flutterwave gateway & securing 4-way escrow.</div>
+        <div style="font-size: 1rem; font-weight: 900; color: #1E293B; margin-bottom: 6px;">Creating Order & Payment Link...</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Connecting to Flutterwave secure gateway.</div>
       </div>
     `;
 
@@ -1658,14 +1660,31 @@ const MobileApp = {
 
       const res = await API.post("/api/marketplace/checkout", payload);
       document.querySelector(".rp-modal-overlay")?.remove();
-      this.cart = [];
-      this.activeTab = "orders";
-      API.showToast(`Order Placed (${res.order_ref})! 4-Digit Delivery PIN: ${res.pod_otp || '8899'}`, "success");
-      this.render();
-      if (window.AdminPortal) window.AdminPortal.init();
+
+      if (res.requires_payment && res.payment_link) {
+        // Gateway payment — store order info and redirect to Flutterwave
+        sessionStorage.setItem("rp_pending_order_ref", res.order_ref);
+        sessionStorage.setItem("rp_pending_order_id", res.order_id);
+        this.cart = [];
+        API.showToast(`Order ${res.order_ref} created! Redirecting to payment...`, "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 800);
+      } else if (res.requires_payment && !res.payment_link) {
+        // Gateway was selected but Flutterwave link failed — still show order
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`Order ${res.order_ref} created. ⚠️ Complete payment manually — contact support if needed.`, "warning");
+        this.render();
+      } else {
+        // Wallet payment — instant success
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`✅ Order ${res.order_ref} placed & paid! Delivery OTP: ${res.pod_otp || '----'}`, "success");
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.init();
+      }
     } catch (e) {
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(e.message || "Failed to complete payment. Please check balance or try card.", "error");
+      API.showToast(e.message || "Failed to place order. Please check your balance or try again.", "error");
     }
   },
 
@@ -1677,6 +1696,9 @@ const MobileApp = {
       return;
     }
 
+    const btn = document.getElementById("btn-place-order") || document.getElementById("btn-wallet-checkout");
+    if (btn) { btn.disabled = true; btn.textContent = "Processing... ⏳"; }
+
     try {
       const payload = {
         store_id: this.cart[0].store_id,
@@ -1687,13 +1709,28 @@ const MobileApp = {
       };
 
       const res = await API.post("/api/marketplace/checkout", payload);
-      this.cart = [];
-      this.activeTab = "orders";
-      API.showToast(`Order ${res.order_ref} placed! Vendor credited 100% product price instantly.`, "success");
-      this.render();
-      if (window.AdminPortal) window.AdminPortal.init();
-    } catch (e) {}
+
+      if (res.requires_payment && res.payment_link) {
+        // Gateway payment — redirect to Flutterwave
+        sessionStorage.setItem("rp_pending_order_ref", res.order_ref);
+        sessionStorage.setItem("rp_pending_order_id", res.order_id);
+        this.cart = [];
+        API.showToast(`Order ${res.order_ref} created! Redirecting to payment...`, "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 800);
+      } else {
+        // Wallet — immediate success
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`✅ Order ${res.order_ref} placed! Delivery OTP: ${res.pod_otp || '----'}`, "success");
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.init();
+      }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = method === "WALLET" ? "Pay with Wallet" : "Pay Now"; }
+      API.showToast(e.message || "Checkout failed. Please try again.", "error");
+    }
   },
+
 
   getCustomerOrdersHtml(orders = []) {
 
@@ -3635,168 +3672,171 @@ const MobileApp = {
   },
 
   async showTopUpModal(currentBalance) {
-    let dedicatedAcc = null;
-    try {
-      const wRes = await API.get("/api/finance/wallet/dedicated-account");
-      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
-    } catch(e) {}
-
-    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank / OPay Virtual";
-    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
-
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
+    modal.id = "topup-main-modal";
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 390px; border-radius: 22px; overflow: hidden; padding: 0;">
-        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">💰 Fund RushPoint Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">💰 Fund Your Wallet</h3>
+            <div style="font-size: 0.68rem; opacity: 0.85; margin-top: 2px;">Secure payments via Flutterwave</div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 32px; height: 32px; color: #FFF; font-size: 1.2rem; cursor: pointer; display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
 
-        <div style="padding: 16px 18px; max-height: 82vh; overflow-y: auto;">
+        <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto; background:#FAFAFA;">
+
           <!-- Current Balance -->
-          <div style="background: #FEF2F2; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.75rem; color: #64748B; font-weight: 800; text-transform: uppercase;">Current Balance</span>
-            <span style="font-size: 1.35rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+          <div style="background: #FFF; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+            <div>
+              <div style="font-size: 0.68rem; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Current Balance</div>
+              <div style="font-size: 1.5rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            </div>
+            <div style="font-size: 2rem;">💳</div>
           </div>
 
-          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Top-Up Method:</div>
+          <!-- Step 1: Amount Input -->
+          <div style="background: #FFF; border: 1.5px solid #E2E8F0; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div style="font-size: 0.82rem; font-weight: 900; color: #1E293B; margin-bottom: 10px;">Enter Amount to Add:</div>
+            <div style="position: relative; margin-bottom: 10px;">
+              <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: #64748B; font-weight: 700;">₦</span>
+              <input type="number" id="topup-amount-input" min="100" step="100" placeholder="e.g. 5000"
+                style="width: 100%; padding: 12px 12px 12px 28px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 1.05rem; font-weight: 800; color: #0F172A; box-sizing: border-box; outline: none;"
+                onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+            <!-- Quick amount buttons -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+              ${[500, 1000, 2000, 5000, 10000, 20000].map(v => `
+                <button type="button" onclick="document.getElementById('topup-amount-input').value=${v}"
+                  style="flex: 1; min-width: 50px; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 7px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; color: #334155;">
+                  ₦${v >= 1000 ? (v/1000)+'k' : v}
+                </button>`).join('')}
+            </div>
 
-          <!-- 1. DEDICATED BANK TRANSFER -->
-          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Permanent Virtual Account</span>
-              <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT CREDIT</span>
-            </div>
-            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 6px;">Transfer any amount from any bank app to credit wallet automatically:</div>
-            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
-                <div style="font-size: 1.15rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
-                <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('✅ Copied: ${accNum}! Paste in bank app.', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
-                Copy
-              </button>
-            </div>
+            <!-- PAY BUTTON — Opens Real Flutterwave Checkout -->
+            <button id="btn-generate-topup-link" onclick="MobileApp.openFlutterwaveTopup()"
+              style="width: 100%; padding: 14px; border: none; border-radius: 12px; background: linear-gradient(135deg, #B91C1C, #DC2626); color: #FFF; font-size: 0.92rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(185,28,28,0.35);">
+              <span>🔐</span> Continue to Secure Payment
+            </button>
           </div>
 
-          <!-- 2. PAY WITH OPAY -->
-          <div style="background: #F0FDF4; border: 1.5px solid #22C55E; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: #15803D; display: flex; align-items: center; gap: 6px;">
-                <span>🔴</span> Pay with OPay
-              </span>
-              <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">OPAY / *955#</span>
-            </div>
-            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 6px;">Send directly from OPay app to your assigned account number:</div>
-            <div style="background: #FFF; border: 1px dashed #22C55E; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <div>
-                <div style="font-size: 0.65rem; color: #64748B;">OPay Transfer NUBAN</div>
-                <div style="font-size: 1.15rem; font-weight: 900; color: #047857; letter-spacing: 1.5px;">${accNum}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('OPay account copied! 📋', 'success')" style="background: #059669; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
-                Copy
-              </button>
-            </div>
-            <a href="tel:*955#" style="display: block; text-align: center; text-decoration: none; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; padding: 7px; border-radius: 8px; font-weight: 800; font-size: 0.74rem;">
-              📱 Dial OPay *955# Fast Top-up
-            </a>
-          </div>
-
-          <!-- 3. DEBIT / CREDIT CARD -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 6px;">💳 Debit / Credit Card Gateway</div>
-            <form onsubmit="MobileApp.executeTopUp(event)">
-              <div class="rp-form-group" style="margin-bottom: 8px;">
-                <input type="number" id="topup-amount" class="rp-input" placeholder="Amount to fund (min ₦100)" min="100" required style="border-radius: 10px; font-weight: 800;">
-                <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                  <button type="button" onclick="document.getElementById('topup-amount').value=1000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦1k</button>
-                  <button type="button" onclick="document.getElementById('topup-amount').value=2000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦2k</button>
-                  <button type="button" onclick="document.getElementById('topup-amount').value=5000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦5k</button>
-                  <button type="button" onclick="document.getElementById('topup-amount').value=10000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦10k</button>
-                </div>
-              </div>
-              <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 10px; border-radius: 10px; background: #B91C1C; font-weight: 800; font-size: 0.82rem;">
-                Pay with Card (Mastercard / Visa / Verve) 💳
-              </button>
-            </form>
-          </div>
-
-          <!-- 4. USSD BANKING -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 6px;">📱 USSD Fast Top-Up</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-              <a href="tel:*737#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">GTB *737#</a>
-              <a href="tel:*966#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Zenith *966#</a>
-              <a href="tel:*901#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Access *901#</a>
-              <a href="tel:*919#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">UBA *919#</a>
-              <a href="tel:*894#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">FirstBank *894#</a>
-              <a href="tel:*955#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">OPay *955#</a>
+          <!-- Payment Methods Badge -->
+          <div style="background: #FFF; border: 1.5px solid #E2E8F0; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;">
+            <div style="font-size: 0.72rem; font-weight: 800; color: #475569; margin-bottom: 8px;">Accepted Payment Methods:</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <span style="background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">🏦 Bank Transfer</span>
+              <span style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">💳 Debit Card</span>
+              <span style="background: #FFF7ED; color: #C2410C; border: 1px solid #FED7AA; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">📱 USSD</span>
+              <span style="background: #F0FDF4; color: #166534; border: 1px solid #86EFAC; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">🔴 OPay</span>
             </div>
           </div>
 
-          <!-- 5. QR CODE SCAN -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 4px;">🔳 Scan NIBSS / OPay QR Code</div>
-            <div style="display: inline-block; padding: 6px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 8px; margin: 4px 0;">
-              <svg width="100" height="100" viewBox="0 0 100 100">
-                <rect width="100" height="100" fill="#ffffff" />
-                <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
-                <rect x="15" y="15" width="20" height="20" fill="#ffffff" />
-                <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
-                <rect x="60" y="10" width="30" height="30" fill="#0f172a" />
-                <rect x="65" y="15" width="20" height="20" fill="#ffffff" />
-                <rect x="70" y="20" width="10" height="10" fill="#0f172a" />
-                <rect x="10" y="60" width="30" height="30" fill="#0f172a" />
-                <rect x="15" y="65" width="20" height="20" fill="#ffffff" />
-                <rect x="20" y="70" width="10" height="10" fill="#0f172a" />
-                <circle cx="50" cy="50" r="10" fill="#059669" />
-                <text x="50" y="54" font-size="8" text-anchor="middle" fill="#ffffff" font-weight="900">RP</text>
-                <rect x="45" y="15" width="10" height="10" fill="#0f172a" />
-                <rect x="45" y="75" width="10" height="10" fill="#0f172a" />
-                <rect x="75" y="55" width="15" height="15" fill="#0f172a" />
-                <rect x="55" y="75" width="15" height="15" fill="#0f172a" />
-              </svg>
-            </div>
-            <div style="font-size: 0.65rem; color: #64748B;">Scan using your bank or OPay mobile application</div>
+          <!-- Info Box -->
+          <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 12px; font-size: 0.68rem; color: #92400E; line-height: 1.5;">
+            ⚡ <strong>How it works:</strong> Click "Continue to Secure Payment" → Flutterwave secure checkout opens → Choose <strong>Bank Transfer</strong> for a real active account (transfers clear in seconds), or pay by <strong>Card or USSD</strong> → Your wallet is credited instantly after payment.
           </div>
+
         </div>
       </div>
     `;
     document.body.appendChild(modal);
   },
 
-  async executeTopUp(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    const amount = parseFloat(document.getElementById("topup-amount").value);
-    if (!amount || amount <= 0) {
-      API.showToast("Please enter a valid deposit amount", "error");
+  async openFlutterwaveTopup() {
+    const amountInput = document.getElementById("topup-amount-input");
+    const amount = parseFloat(amountInput ? amountInput.value : 0);
+    if (!amount || amount < 100) {
+      API.showToast("Please enter a minimum amount of ₦100", "error");
       return;
     }
 
-    const btn = document.getElementById("btn-submit-topup");
-    if (btn) { btn.disabled = true; btn.textContent = "Connecting Gateway… 🔐"; }
+    const btn = document.getElementById("btn-generate-topup-link");
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳</span> Connecting to Flutterwave…`;
+      btn.style.background = "#6B7280";
+    }
 
     try {
-      const res = await API.post("/api/finance/payment/initialize", {
+      const res = await API.post("/api/finance/wallet/generate-payment-link", {
         amount,
-        payment_type: "WALLET_TOPUP",
         redirect_url: window.location.origin + "/app"
       });
-      document.querySelector(".rp-modal-overlay")?.remove();
-      if (res.payment_link && res.gateway === "FLUTTERWAVE_LIVE") {
-        API.showToast("Redirecting to online checkout…", "info");
-        window.location.href = res.payment_link;
+
+      if (res && res.success && res.payment_link) {
+        // Store the tx_ref in sessionStorage so we can verify when user comes back
+        sessionStorage.setItem("rp_pending_topup_ref", res.reference);
+        sessionStorage.setItem("rp_pending_topup_amount", amount.toString());
+
+        // Close modal and navigate to Flutterwave
+        document.getElementById("topup-main-modal")?.remove();
+        API.showToast("🔐 Redirecting to secure Flutterwave checkout…", "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 600);
       } else {
-        API.showToast("Deposit reference generated: " + res.reference, "info");
-        this.render();
+        throw new Error(res?.message || "Could not get payment link");
       }
     } catch (err) {
-      if (btn) { btn.disabled = false; btn.textContent = "Pay with Card 💳"; }
+      const msg = err?.message || "Failed to connect to payment gateway";
+      API.showToast(`❌ ${msg}`, "error");
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🔐</span> Continue to Secure Payment`;
+        btn.style.background = "linear-gradient(135deg, #B91C1C, #DC2626)";
+      }
     }
   },
+
+  async checkAndProcessTopupReturn() {
+    // Called on app init to auto-verify if user just returned from Flutterwave
+    const urlParams = new URLSearchParams(window.location.search);
+    const topupRef = urlParams.get("topup_ref") || sessionStorage.getItem("rp_pending_topup_ref");
+    const flwStatus = urlParams.get("status");
+
+    if (!topupRef) return;
+
+    // Clean up URL and sessionStorage
+    sessionStorage.removeItem("rp_pending_topup_ref");
+    sessionStorage.removeItem("rp_pending_topup_amount");
+
+    // Remove query params from URL without reload
+    try {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch(e) {}
+
+    // Only verify if Flutterwave shows successful or if we have a reference to check
+    if (flwStatus && flwStatus !== "successful" && flwStatus !== "completed") {
+      if (flwStatus === "cancelled") {
+        API.showToast("Payment was cancelled. Your wallet was not charged.", "info");
+      } else {
+        API.showToast(`Payment status: ${flwStatus}. If you were charged, tap 'Verify Payment' in your wallet.`, "warning");
+      }
+      return;
+    }
+
+    // Show a loading toast while we verify
+    API.showToast("⏳ Verifying your payment…", "info");
+
+    try {
+      const res = await API.post("/api/finance/wallet/verify-and-credit", { tx_ref: topupRef });
+      if (res && res.success) {
+        if (res.status === "ALREADY_CREDITED") {
+          API.showToast(`✅ ${res.message}`, "success");
+        } else {
+          API.showToast(`🎉 ${res.message} New balance: ₦${(res.new_balance || 0).toLocaleString()}`, "success");
+        }
+        // Re-render to show updated balance
+        setTimeout(() => { this.render(); }, 800);
+      }
+    } catch (err) {
+      const errMsg = err?.message || "Could not verify payment";
+      // Show a manual verify option
+      API.showToast(`⚠️ ${errMsg}`, "error");
+    }
+  },
+
+
 
   async onTransferAccountChanged() {
     const accInput = document.getElementById("wdr-account-number");

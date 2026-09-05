@@ -362,19 +362,69 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
     now_iso = datetime.now(timezone.utc).isoformat()
     
     # 1. Multi-Payment Processing (Gateway / Transfer / OPay / Card / USSD / QR vs RP Wallet Escrow)
+    import os
+    import requests as http_req
     method_upper = (req.payment_method or "WALLET").upper()
     is_gateway = method_upper in ["FLUTTERWAVE", "CARD", "BANK_TRANSFER", "TRANSFER", "USSD", "QR_CODE", "OPAY", "PAY_WITH_OPAY"]
-    
+
+    payment_link = None
+    payment_status_val = "PAID"
+
     if is_gateway:
+        # Gateway payment: do NOT credit vendor or mark PAID until Flutterwave webhook confirms.
+        # Generate a real Flutterwave payment link and return it — the webhook will credit vendor.
         payment_method_label = method_upper
+        payment_status_val = "PENDING_PAYMENT"
+
+        flw_secret = os.getenv("FLUTTERWAVE_SECRET_KEY") or os.getenv("FLW_SECRET_KEY") or "Tr7wTwOvbk8vlbJOBVd4m37dYBqijPkJ"
+        tx_ref = f"RP-ORDER-{order_ref}-{secrets.randbelow(9000)+1000}"
+        redirect_url = f"https://rushpoint2.onrender.com/app?order_ref={order_ref}&order_tx={tx_ref}"
+        try:
+            flw_resp = http_req.post(
+                "https://api.flutterwave.com/v3/payments",
+                json={
+                    "tx_ref": tx_ref,
+                    "amount": str(total_amount),
+                    "currency": "NGN",
+                    "payment_options": "banktransfer,card,ussd,opay",
+                    "redirect_url": redirect_url,
+                    "customer": {
+                        "email": current_user.get("email", "customer@rushpoint.com"),
+                        "phonenumber": current_user.get("phone", "+2348000000000"),
+                        "name": current_user.get("full_name", "Customer")
+                    },
+                    "customizations": {
+                        "title": "RushPoint Order Payment",
+                        "description": f"Payment for Order {order_ref} — ₦{total_amount:,.0f}"
+                    },
+                    "meta": {
+                        "user_id": current_user["id"],
+                        "order_id": order_id,
+                        "order_ref": order_ref,
+                        "payment_type": "ORDER_PAYMENT",
+                        "vendor_id": store["vendor_id"],
+                        "subtotal": subtotal,
+                        "delivery_holding": delivery_fee + platform_fee
+                    }
+                },
+                headers={"Authorization": f"Bearer {flw_secret}", "Content-Type": "application/json"},
+                timeout=15
+            )
+            flw_data = flw_resp.json()
+            if flw_resp.status_code == 200 and flw_data.get("status") == "success":
+                payment_link = flw_data["data"]["link"]
+        except Exception:
+            pass
+
     else:
         # Paid via RushingPoint Customer Wallet Escrow
         payment_method_label = "RP_WALLET"
+        payment_status_val = "PAID"
         wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
         if not wallet or wallet["balance"] < total_amount:
             conn.close()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Insufficient wallet funds. Required: ₦{total_amount:,.2f}, Current Balance: ₦{wallet['balance'] if wallet else 0.0:,.2f}. Please fund your wallet or pay with Bank Transfer / Card."
             )
         new_balance = wallet["balance"] - total_amount
@@ -384,41 +434,41 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
             VALUES (?, ?, ?, ?, 'DEBIT', ?, ?, ?, ?)
         """, (str(uuid.uuid4()), wallet["id"], current_user["id"], f"RP-TXN-PAY-{order_ref}", total_amount, f"Payment for Order {order_ref}", new_balance, now_iso))
 
-    # 2. INSTANT VENDOR PAYOUT (Vendor gets 100% of their assigned product price without losing commission)
-    vendor = conn.execute("SELECT user_id FROM vendors WHERE id = ?", (store["vendor_id"],)).fetchone()
-    if vendor:
-        v_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (vendor["user_id"],)).fetchone()
-        if not v_wallet:
-            v_wallet_id = str(uuid.uuid4())
-            conn.execute("INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, ?, 'NGN', ?)", (v_wallet_id, vendor["user_id"], subtotal, now_iso))
-            v_new_bal = subtotal
-        else:
-            v_wallet_id = v_wallet["id"]
-            v_new_bal = v_wallet["balance"] + subtotal
-            conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (v_new_bal, now_iso, v_wallet["id"]))
-            
-        conn.execute("""
-            INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
-            VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
-        """, (str(uuid.uuid4()), v_wallet_id, vendor["user_id"], f"RP-TXN-VND-{order_ref}", subtotal, f"Instant Product Sale Revenue for Order {order_ref} (100% Product Price)", v_new_bal, now_iso))
-
-    # 3. DELIVERY MONEY GOES TO ADMIN ESCROW WALLET UNTIL DELIVERY
-    admin_user = conn.execute("SELECT id FROM users WHERE account_type = 'ADMIN' LIMIT 1").fetchone()
-    delivery_holding = delivery_fee + platform_fee
-    if admin_user:
-        adm_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (admin_user["id"],)).fetchone()
-        if adm_wallet:
-            adm_new_bal = adm_wallet["balance"] + delivery_holding
-            conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (adm_new_bal, now_iso, adm_wallet["id"]))
+        # 2. INSTANT VENDOR PAYOUT — only for wallet payments (gateway payments wait for webhook)
+        vendor = conn.execute("SELECT user_id FROM vendors WHERE id = ?", (store["vendor_id"],)).fetchone()
+        if vendor:
+            v_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (vendor["user_id"],)).fetchone()
+            if not v_wallet:
+                v_wallet_id = str(uuid.uuid4())
+                conn.execute("INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, ?, 'NGN', ?)", (v_wallet_id, vendor["user_id"], subtotal, now_iso))
+                v_new_bal = subtotal
+            else:
+                v_wallet_id = v_wallet["id"]
+                v_new_bal = v_wallet["balance"] + subtotal
+                conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (v_new_bal, now_iso, v_wallet["id"]))
             conn.execute("""
                 INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
                 VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
-            """, (str(uuid.uuid4()), adm_wallet["id"], admin_user["id"], f"RP-TXN-ADM-ESCROW-{order_ref}", delivery_holding, f"Delivery Fee & Platform Escrow for Order {order_ref}", adm_new_bal, now_iso))
+            """, (str(uuid.uuid4()), v_wallet_id, vendor["user_id"], f"RP-TXN-VND-{order_ref}", subtotal, f"Instant Product Sale Revenue for Order {order_ref} (100% Product Price)", v_new_bal, now_iso))
+
+        # Delivery fee goes to Admin Escrow Wallet
+        admin_user = conn.execute("SELECT id FROM users WHERE account_type = 'ADMIN' LIMIT 1").fetchone()
+        delivery_holding = delivery_fee + platform_fee
+        if admin_user:
+            adm_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (admin_user["id"],)).fetchone()
+            if adm_wallet:
+                adm_new_bal = adm_wallet["balance"] + delivery_holding
+                conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (adm_new_bal, now_iso, adm_wallet["id"]))
+                conn.execute("""
+                    INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                    VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), adm_wallet["id"], admin_user["id"], f"RP-TXN-ADM-ESCROW-{order_ref}", delivery_holding, f"Delivery Fee & Platform Escrow for Order {order_ref}", adm_new_bal, now_iso))
 
     # 4. Create Order Record
+    delivery_holding_val = delivery_fee + platform_fee
     conn.execute("""
         INSERT INTO orders (id, order_ref, customer_id, store_id, subtotal, delivery_fee, platform_fee, total_amount, delivery_address, delivery_lat, delivery_lng, customer_phone, payment_method, payment_status, status, pod_otp, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PAID', 'NEW', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?, ?)
     """, (
         order_id,
         order_ref,
@@ -433,56 +483,53 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
         req.delivery_lng or 3.3792,
         req.customer_phone or (current_user["phone"] if "phone" in current_user.keys() else ""),
         payment_method_label,
+        payment_status_val,
         pod_otp,
         now_iso,
         now_iso
     ))
-    
+
     # 5. Insert Order Items & Deduct Stock
     for itm in order_items_to_insert:
         conn.execute("""
             INSERT INTO order_items (id, order_id, product_id, product_name, unit_price, quantity, total_price)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (str(uuid.uuid4()), order_id, itm["product_id"], itm["product_name"], itm["unit_price"], itm["quantity"], itm["total_price"]))
-        
+
         conn.execute("""
             UPDATE products
             SET stock_qty = stock_qty - ?,
                 updated_at = ?
             WHERE id = ?
         """, (itm["quantity"], now_iso, itm["product_id"]))
-        
+
     # 6. Record Initial Order Timeline
+    timeline_note = f"Order placed via {payment_method_label}."
+    if is_gateway:
+        timeline_note += f" Payment pending — customer will complete via Flutterwave checkout (₦{total_amount:,.2f})."
+    else:
+        timeline_note += f" Vendor credited ₦{subtotal:,.2f} immediately. Delivery fee held in Admin Escrow."
     conn.execute("""
         INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
         VALUES (?, ?, NULL, 'NEW', ?, 'Customer', ?, ?)
-    """, (str(uuid.uuid4()), order_id, current_user["id"], f"Order placed and paid via {payment_method_label}. Vendor credited 100% product value (₦{subtotal:,.2f}). Delivery fee held in Admin Escrow.", now_iso))
-    
+    """, (str(uuid.uuid4()), order_id, current_user["id"], timeline_note, now_iso))
+
     # 7. Initialize 4-Way Financial Settlement Ledger
-    rider_split = round(delivery_fee * 0.80, 2) # 80% of delivery fee for partner riders
+    rider_split = round(delivery_fee * 0.80, 2)
     platform_net = round(total_amount - subtotal - rider_split, 2)
-    
     settlement_id = str(uuid.uuid4())
     settlement_ref = f"RP-SETTLE-{secrets.randbelow(900000)+100000}"
+    ledger_status = "ESCROW_HELD" if is_gateway else "ESCROW_HELD"
     conn.execute("""
         INSERT INTO financial_settlements (id, settlement_ref, order_id, customer_id, vendor_id, rider_id, total_customer_paid, vendor_amount, rider_earnings, platform_revenue, status, created_at)
-        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'ESCROW_HELD', ?)
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
     """, (
-        settlement_id,
-        settlement_ref,
-        order_id,
-        current_user["id"],
-        store["vendor_id"],
-        total_amount,
-        subtotal,
-        rider_split,
-        platform_net,
-        now_iso
+        settlement_id, settlement_ref, order_id, current_user["id"], store["vendor_id"],
+        total_amount, subtotal, rider_split, platform_net, ledger_status, now_iso
     ))
-    
+
     # Push Real-Time Audio Notifications to Vendor and Customer
     try:
-        # 1. Notify Vendor
         vendor_user = conn.execute("SELECT user_id FROM vendors WHERE id = ?", (store["vendor_id"],)).fetchone()
         if vendor_user:
             push_system_notification(
@@ -495,12 +542,11 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
                 order_ref=order_ref,
                 customer_phone=req.delivery_phone
             )
-        # 2. Notify Customer
         push_system_notification(
             conn=conn,
             user_id=current_user["id"],
             title="✅ Order Placed Successfully",
-            message=f"Your order {order_ref} has been placed and is being prepared by {store['store_name']}.",
+            message=f"Your order {order_ref} has been placed. {'Complete payment to confirm.' if is_gateway else 'Being prepared by ' + store['store_name'] + '.'}",
             category="ORDER",
             sound_type="chime",
             order_ref=order_ref,
@@ -511,19 +557,27 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
 
     conn.commit()
     conn.close()
-    
-    return {
+
+    resp = {
         "success": True,
-        "message": f"Order {order_ref} placed successfully via {payment_method_label}!",
+        "message": f"Order {order_ref} placed!" + (" Complete payment to confirm your order." if is_gateway else f" Vendor credited ₦{subtotal:,.2f} instantly."),
         "order_id": order_id,
         "order_ref": order_ref,
         "total_amount": total_amount,
-        "vendor_credited": subtotal,
-        "delivery_held_by_admin": delivery_holding,
+        "payment_status": payment_status_val,
         "payment_gateway": payment_method_label,
         "pod_otp": pod_otp,
         "status": "NEW"
     }
+    if payment_link:
+        resp["payment_link"] = payment_link
+        resp["requires_payment"] = True
+    else:
+        resp["vendor_credited"] = subtotal if not is_gateway else 0
+        resp["delivery_held_by_admin"] = delivery_holding_val if not is_gateway else 0
+
+    return resp
+
 
 
 @router.get("/geocode")

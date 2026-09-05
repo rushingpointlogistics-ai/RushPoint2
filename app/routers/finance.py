@@ -157,45 +157,33 @@ def create_expense(payload: dict, current_user: dict = Depends(require_role(["AD
 
 def ensure_dedicated_virtual_account(conn, user_id: str, full_name: str, user_ref: str) -> dict:
     """
-    Generates or retrieves a unique dedicated virtual bank account number for the user's wallet.
-    Allows instant bank transfer wallet funding from any Nigerian bank (OPay, Kuda, GTBank, Zenith, FirstBank).
+    Attempts to retrieve an already-saved Flutterwave virtual account for this user's wallet.
+    If no real account has been provisioned yet, returns None so the frontend
+    shows the dynamic Flutterwave checkout option (which always gives a real live account).
     """
     wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
     if not wallet:
         now_iso = datetime.now(timezone.utc).isoformat()
         w_id = str(uuid.uuid4())
         conn.execute("INSERT INTO wallets (id, user_id, balance, currency, updated_at) VALUES (?, ?, 0.0, 'NGN', ?)", (w_id, user_id, now_iso))
+        conn.commit()
         wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", (w_id,)).fetchone()
 
+    # Only return a real account number — never return a synthetic 99xxxxxxxx fake number
     acc_num = wallet["dedicated_account_number"] if "dedicated_account_number" in wallet.keys() else None
-    bank_name = wallet["dedicated_bank_name"] if "dedicated_bank_name" in wallet.keys() else "Wema Bank (Flutterwave)"
-    acc_name = wallet["dedicated_account_name"] if "dedicated_account_name" in wallet.keys() else f"RushPoint - {full_name}"
+    bank_name = wallet["dedicated_bank_name"] if "dedicated_bank_name" in wallet.keys() else None
+    acc_name = wallet["dedicated_account_name"] if "dedicated_account_name" in wallet.keys() else None
 
-    if not acc_num:
-        # Generate unique 10-digit virtual account number based on user_ref / hash
-        ref_digits = ''.join(filter(str.isdigit, user_ref or ''))
-        if len(ref_digits) < 6:
-            ref_digits = f"{secrets.randbelow(900000)+100000}"
-        acc_num = f"99{ref_digits.zfill(8)[:8]}"
-        now_iso = datetime.now(timezone.utc).isoformat()
-        try:
-            conn.execute("""
-                UPDATE wallets
-                SET dedicated_bank_name = ?,
-                    dedicated_account_number = ?,
-                    dedicated_account_name = ?,
-                    updated_at = ?
-                WHERE id = ?
-            """, (bank_name, acc_num, acc_name, now_iso, wallet["id"]))
-            conn.commit()
-        except Exception:
-            pass
+    # If account was previously saved and looks real (not the old 99-prefix fake ones), return it
+    if acc_num and not acc_num.startswith("99"):
+        return {
+            "bank_name": bank_name or "Wema Bank",
+            "account_number": acc_num,
+            "account_name": acc_name or f"RushPoint - {full_name}"
+        }
 
-    return {
-        "bank_name": bank_name or "Wema Bank (Flutterwave)",
-        "account_number": acc_num or f"99{secrets.randbelow(90000000)+10000000}",
-        "account_name": acc_name or f"RushPoint - {full_name}"
-    }
+    # No real dedicated account yet — return None so frontend shows dynamic checkout
+    return None
 
 @router.get("/wallet")
 @router.get("/wallet/me")
@@ -731,8 +719,9 @@ async def flutterwave_webhook_endpoint(request: Request):
     if (status_str == "successful" or event == "charge.completed") and tx_ref:
         existing = conn.execute("SELECT id FROM wallet_transactions WHERE reference = ?", (tx_ref,)).fetchone()
         if not existing:
-            meta = data.get("meta", {})
+            meta = data.get("meta", {}) or {}
             user_id = meta.get("user_id")
+            payment_type = meta.get("payment_type", "WALLET_TOPUP")
 
             # Try finding user by email or phone if not in meta
             if not user_id:
@@ -747,22 +736,65 @@ async def flutterwave_webhook_endpoint(request: Request):
                     if user_row:
                         user_id = user_row["id"]
 
-            if user_id:
+            # ─── ORDER PAYMENT ───────────────────────────────────────────────
+            order_id_from_meta = meta.get("order_id")
+            order_ref_from_meta = meta.get("order_ref")
+
+            if payment_type == "ORDER_PAYMENT" and order_id_from_meta:
+                order = conn.execute("SELECT * FROM orders WHERE id = ? OR order_ref = ?", (order_id_from_meta, order_ref_from_meta or "")).fetchone()
+                if order and order["payment_status"] != "PAID":
+                    # Mark order as PAID
+                    conn.execute("UPDATE orders SET payment_status = 'PAID', updated_at = ? WHERE id = ?", (now_iso, order["id"]))
+
+                    # Credit Vendor — subtotal from meta, or fallback to order subtotal
+                    subtotal = float(meta.get("subtotal", order.get("subtotal") or 0))
+                    vendor_id = meta.get("vendor_id") or order.get("store_id")
+                    if vendor_id:
+                        # Get vendor user_id from vendor or store
+                        vnd_row = conn.execute("SELECT user_id FROM vendors WHERE id = ?", (vendor_id,)).fetchone()
+                        if not vnd_row:
+                            # Try getting from store
+                            store_row = conn.execute("SELECT v.user_id FROM stores s JOIN vendors v ON s.vendor_id = v.id WHERE s.id = ?", (order["store_id"],)).fetchone()
+                            vnd_row = store_row
+                        if vnd_row and subtotal > 0:
+                            v_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (vnd_row["user_id"],)).fetchone()
+                            if v_wallet:
+                                v_new_bal = v_wallet["balance"] + subtotal
+                                conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (v_new_bal, now_iso, v_wallet["id"]))
+                                conn.execute("""
+                                    INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                                    VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+                                """, (str(uuid.uuid4()), v_wallet["id"], vnd_row["user_id"], tx_ref,
+                                      subtotal, f"Order Payment Received — {order['order_ref']} (via Flutterwave)", v_new_bal, now_iso))
+
+                    # Credit Admin delivery escrow
+                    delivery_holding = float(meta.get("delivery_holding", (order.get("delivery_fee") or 0) + (order.get("platform_fee") or 0)))
+                    if delivery_holding > 0:
+                        admin_user = conn.execute("SELECT id FROM users WHERE account_type = 'ADMIN' LIMIT 1").fetchone()
+                        if admin_user:
+                            adm_wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (admin_user["id"],)).fetchone()
+                            if adm_wallet:
+                                adm_new_bal = adm_wallet["balance"] + delivery_holding
+                                conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (adm_new_bal, now_iso, adm_wallet["id"]))
+                                conn.execute("""
+                                    INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+                                    VALUES (?, ?, ?, ?, 'CREDIT', ?, ?, ?, ?)
+                                """, (str(uuid.uuid4()), adm_wallet["id"], admin_user["id"], f"ESCROW-{tx_ref}",
+                                      delivery_holding, f"Delivery Escrow — Order {order['order_ref']}", adm_new_bal, now_iso))
+
+                    conn.commit()
+
+            # ─── WALLET TOP-UP ────────────────────────────────────────────────
+            elif user_id and payment_type != "ORDER_PAYMENT":
                 wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
                 if wallet:
                     new_bal = wallet["balance"] + amount
                     conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, now_iso, wallet["id"]))
                     conn.execute("""
                         INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
-                        VALUES (?, ?, ?, ?, 'CREDIT', ?, 'Online Gateway Deposit (Flutterwave)', ?, ?)
+                        VALUES (?, ?, ?, ?, 'CREDIT', ?, 'Flutterwave Wallet Top-Up', ?, ?)
                     """, (str(uuid.uuid4()), wallet["id"], user_id, tx_ref, amount, new_bal, now_iso))
                     conn.commit()
-
-            # If order payment, mark order confirmed
-            order_id = meta.get("order_id")
-            if order_id:
-                conn.execute("UPDATE orders SET payment_status = 'PAID', updated_at = ? WHERE id = ? OR order_ref = ?", (now_iso, order_id, order_id))
-                conn.commit()
 
     # 2. FAILED CHARGE NOTIFICATION
     elif status_str == "failed" or event == "charge.failed":
@@ -804,7 +836,6 @@ async def flutterwave_webhook_endpoint(request: Request):
 
     conn.close()
     return {"status": "success", "message": "Flutterwave webhook event processed successfully."}
-
 
 
 @router.post("/withdraw")
@@ -917,7 +948,8 @@ def verify_transaction_security_pin(payload: dict, current_user: dict = Depends(
 @router.get("/wallet/dedicated-account")
 def get_my_dedicated_virtual_account(current_user: dict = Depends(get_current_user)):
     """
-    Returns the user's permanent unique dedicated bank account for instant transfer funding.
+    Returns the user's saved Flutterwave virtual bank account (if a real one exists).
+    Returns null if no real account provisioned yet — frontend should use the dynamic checkout instead.
     """
     conn = get_db_connection()
     acc_info = ensure_dedicated_virtual_account(conn, current_user["id"], current_user.get("full_name", "User"), current_user.get("user_ref", "RP-001"))
@@ -927,8 +959,193 @@ def get_my_dedicated_virtual_account(current_user: dict = Depends(get_current_us
     return {
         "success": True,
         "wallet_balance": wallet["balance"] if wallet else 0.0,
-        "dedicated_account": acc_info,
-        "instructions": "Transfer any amount from any Nigerian bank (OPay, Kuda, GTB, Zenith, PalmPay) to this dedicated account number for instant wallet credit."
+        "dedicated_account": acc_info,  # Will be None if no real account provisioned
+        "instructions": "Use the Flutterwave checkout button to fund your wallet instantly via Bank Transfer, Card, or USSD."
+    }
+
+
+@router.post("/wallet/generate-payment-link")
+def generate_wallet_topup_payment_link(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Generates a REAL live Flutterwave payment link for wallet top-up.
+    The Flutterwave checkout provides: Bank Transfer (real active NUBAN), Card, USSD, OPay.
+    After payment, Flutterwave webhooks auto-credit the wallet OR user can call /verify-and-credit.
+    """
+    amount = float(payload.get("amount", 0))
+    if amount < 100:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Minimum top-up amount is ₦100.")
+
+    creds = get_flw_credentials()
+    flw_secret = creds["secret_key"]
+
+    tx_ref = f"RP-TOPUP-{current_user['id'][:8]}-{secrets.randbelow(9000000) + 1000000}"
+
+    redirect_url = payload.get("redirect_url", "https://rushpoint2.onrender.com/app")
+    # Append tx_ref so when user returns we can verify
+    if "?" in redirect_url:
+        redirect_url += f"&topup_ref={tx_ref}"
+    else:
+        redirect_url += f"?topup_ref={tx_ref}"
+
+    try:
+        flw_payload = {
+            "tx_ref": tx_ref,
+            "amount": str(amount),
+            "currency": "NGN",
+            "payment_options": "banktransfer,card,ussd,opay",
+            "redirect_url": redirect_url,
+            "customer": {
+                "email": current_user.get("email", "customer@rushpoint.com"),
+                "phonenumber": current_user.get("phone", "+2348000000000"),
+                "name": current_user.get("full_name", "Customer")
+            },
+            "customizations": {
+                "title": "RushPoint Wallet Top-Up",
+                "description": f"Fund your wallet with ₦{amount:,.0f} — Bank Transfer, Card or USSD",
+                "logo": "https://rushpoint2.onrender.com/static/img/logo.png"
+            },
+            "meta": {
+                "user_id": current_user["id"],
+                "payment_type": "WALLET_TOPUP",
+                "full_name": current_user.get("full_name", "")
+            }
+        }
+        res = http_requests.post(
+            "https://api.flutterwave.com/v3/payments",
+            json=flw_payload,
+            headers={
+                "Authorization": f"Bearer {flw_secret}",
+                "Content-Type": "application/json"
+            },
+            timeout=15
+        )
+        data = res.json()
+        if res.status_code == 200 and data.get("status") == "success":
+            return {
+                "success": True,
+                "payment_link": data["data"]["link"],
+                "reference": tx_ref,
+                "amount": amount,
+                "gateway": "FLUTTERWAVE_LIVE",
+                "message": "Click the payment link — choose Bank Transfer for a real active account number, or pay by Card/USSD."
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Flutterwave error: {data.get('message', 'Unknown error')}. Please try again."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not reach payment gateway. Check your internet connection and try again. Error: {str(e)}"
+        )
+
+
+@router.post("/wallet/verify-and-credit")
+def verify_and_credit_wallet(payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Verifies a Flutterwave transaction reference and instantly credits the wallet.
+    Called when the user returns from Flutterwave checkout OR after bank transfer confirmation.
+    IDEMPOTENT: Will not double-credit if already processed.
+    """
+    tx_ref = str(payload.get("tx_ref", "")).strip()
+    if not tx_ref:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transaction reference (tx_ref) is required.")
+
+    conn = get_db_connection()
+
+    # Idempotency: check if already processed
+    existing = conn.execute("SELECT id, amount FROM wallet_transactions WHERE reference = ?", (tx_ref,)).fetchone()
+    if existing:
+        wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
+        conn.close()
+        return {
+            "success": True,
+            "status": "ALREADY_CREDITED",
+            "message": f"This payment (₦{existing['amount']:,.2f}) was already credited to your wallet.",
+            "wallet_balance": wallet["balance"] if wallet else 0.0
+        }
+
+    wallet = conn.execute("SELECT * FROM wallets WHERE user_id = ?", (current_user["id"],)).fetchone()
+    if not wallet:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found.")
+
+    creds = get_flw_credentials()
+    flw_secret = creds["secret_key"]
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Call Flutterwave to verify the transaction
+    try:
+        res = http_requests.get(
+            f"https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref={tx_ref}",
+            headers={"Authorization": f"Bearer {flw_secret}"},
+            timeout=15
+        )
+        resp_json = res.json()
+    except Exception as e:
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not reach Flutterwave to verify payment. Please try again in a moment."
+        )
+
+    if res.status_code != 200 or resp_json.get("status") != "success":
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Payment not found or not yet completed. Flutterwave says: {resp_json.get('message', 'Transaction not found')}. Please wait a moment and try again."
+        )
+
+    tx_data = resp_json.get("data", {})
+    tx_status = tx_data.get("status", "")
+
+    if tx_status != "successful":
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Payment is '{tx_status}' — not yet successful. Please complete your bank transfer and try again."
+        )
+
+    # Verify user identity from meta to prevent tx_ref hijacking
+    meta = tx_data.get("meta", {})
+    flw_user_id = meta.get("user_id", "") if meta else ""
+    if flw_user_id and flw_user_id != current_user["id"]:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This payment reference belongs to a different account.")
+
+    verified_amount = float(tx_data.get("amount", 0))
+    if verified_amount <= 0:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment amount is zero.")
+
+    # Credit the wallet
+    new_balance = wallet["balance"] + verified_amount
+    conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_balance, now_iso, wallet["id"]))
+    conn.execute("""
+        INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
+        VALUES (?, ?, ?, ?, 'CREDIT', ?, 'Flutterwave Payment — Wallet Top-Up', ?, ?)
+    """, (str(uuid.uuid4()), wallet["id"], current_user["id"], tx_ref, verified_amount, new_balance, now_iso))
+    conn.commit()
+    conn.close()
+
+    log_audit(
+        actor_user=current_user,
+        action="WALLET_TOPUP_VERIFIED",
+        resource_type="wallets",
+        resource_id=wallet["id"],
+        details={"tx_ref": tx_ref, "amount": verified_amount, "new_balance": new_balance, "gateway": "FLUTTERWAVE"}
+    )
+
+    return {
+        "success": True,
+        "status": "CREDITED",
+        "message": f"✅ ₦{verified_amount:,.2f} successfully added to your wallet!",
+        "amount_credited": verified_amount,
+        "new_balance": new_balance,
+        "reference": tx_ref
     }
 
 @router.get("/daily-reconciliation-snapshot")
