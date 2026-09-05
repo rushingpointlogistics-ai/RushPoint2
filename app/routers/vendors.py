@@ -247,8 +247,8 @@ def get_vendor_low_stock_alerts(current_user: dict = Depends(get_current_user)):
         "success": True,
         "store_id": store["id"],
         "store_name": store["store_name"],
-        "low_stock_count": len(items),
-        "products": items
+        "low_stock_count": len(rows),
+        "products": [dict(r) for r in rows]
     }
 
 

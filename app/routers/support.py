@@ -114,3 +114,59 @@ def change_ticket_status(ticket_id: str, payload: dict, current_user: dict = Dep
     conn.close()
     
     return {"success": True, "status": new_status}
+
+
+@router.put("/tickets/{ticket_id}")
+def update_ticket_by_admin(ticket_id: str, payload: dict, current_user: dict = Depends(require_role(["ADMIN", "STAFF", "Super Admin", "Customer Support", "Operations Manager"]))):
+    """
+    Admin / Support: Update ticket status and/or priority via PUT.
+    Used by admin portal resolveTicket() and escalateTicket() actions.
+    Accepts:  { "status": "RESOLVED" | "ESCALATED" | ... , "priority": "URGENT" | ... }
+    """
+    conn = get_db_connection()
+    ticket = conn.execute(
+        "SELECT id FROM support_tickets WHERE id = ? OR ticket_ref = ?",
+        (ticket_id, ticket_id)
+    ).fetchone()
+
+    if not ticket:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_status = payload.get("status")
+    new_priority = payload.get("priority")
+
+    valid_statuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "ESCALATED"]
+    valid_priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"]
+
+    if new_status and new_status not in valid_statuses:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status. Valid: {valid_statuses}")
+
+    if new_priority and new_priority not in valid_priorities:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid priority. Valid: {valid_priorities}")
+
+    update_parts = ["updated_at = ?"]
+    params = [now_iso]
+
+    if new_status:
+        update_parts.append("status = ?")
+        params.append(new_status)
+    if new_priority:
+        update_parts.append("priority = ?")
+        params.append(new_priority)
+
+    params.append(ticket["id"])
+    conn.execute(f"UPDATE support_tickets SET {', '.join(update_parts)} WHERE id = ?", tuple(params))
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "ticket_id": ticket["id"],
+        "status": new_status,
+        "priority": new_priority,
+        "message": "Ticket updated successfully."
+    }

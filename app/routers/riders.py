@@ -1,3 +1,5 @@
+import uuid
+import secrets
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.database import get_db_connection
@@ -287,7 +289,7 @@ def confirm_delivery_with_otp(payload: dict, current_user: dict = Depends(get_cu
 
     # Calculate earnings
     delivery_fee = float(order["delivery_fee"] or 1000.0)
-    subtotal = float(order["subtotal_amount"] or 0.0)
+    subtotal = float(order["subtotal"] or 0.0)
     rider_earning = round(delivery_fee * 0.80, 2)
     vendor_earning = subtotal # 100% of product price to vendor
 

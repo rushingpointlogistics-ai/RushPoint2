@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from app.database import get_db_connection
-from app.security import get_current_user, require_role, log_audit
+from app.security import get_current_user, require_role, log_audit, hash_password, verify_password
 
 router = APIRouter(prefix="/api/finance", tags=["Finance, 4-Way Ledger & Wallets"])
 

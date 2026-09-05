@@ -399,6 +399,40 @@ def process_order_refund(order_id: str, payload: dict = {}, current_user: dict =
         "refund_amount": ord_row["total_amount"]
     }
 
+
+@router.post("/{order_id}/vendor-confirm")
+def vendor_confirm_incoming_order(order_id: str, payload: dict = {}, current_user: dict = Depends(get_current_user)):
+    """
+    Vendor accepts an incoming call/order notification from the web app.
+    Sets order status NEW → CONFIRMED so the kitchen can start preparing.
+    Used by mobile-app.js dismissIncomingCall() when vendor taps Accept.
+    """
+    conn = get_db_connection()
+    ord_row = conn.execute(
+        "SELECT o.*, s.vendor_id FROM orders o JOIN stores s ON o.store_id = s.id WHERE o.id = ? OR o.order_ref = ?",
+        (order_id, order_id)
+    ).fetchone()
+
+    if not ord_row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+
+    if ord_row["status"] not in ["NEW", "PENDING"]:
+        conn.close()
+        return {"success": True, "message": "Order already confirmed.", "status": ord_row["status"]}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn.execute("UPDATE orders SET status = 'CONFIRMED', updated_at = ? WHERE id = ?", (now_iso, ord_row["id"]))
+    conn.execute("""
+        INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+        VALUES (?, ?, 'NEW', 'CONFIRMED', ?, 'Vendor', 'Vendor accepted incoming order notification', ?)
+    """, (str(uuid.uuid4()), ord_row["id"], current_user["id"], now_iso))
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "status": "CONFIRMED", "message": "Order confirmed! Start preparing."}
+
+
 @router.post("/{order_id}/cancel")
 @router.post("/{order_id}/refund")
 @router.post("/{order_id}/vendor-cancel")
@@ -832,3 +866,106 @@ def resolve_order_dispute(order_id: str, payload: dict, current_user: dict = Dep
     return {"success": True, "decision": decision, "message": msg}
 
 
+# ──────────────────────────────────────────────
+# Flutter Vendor App Compatibility Endpoints
+# ──────────────────────────────────────────────
+
+@router.get("/vendor/my-orders")
+def get_vendor_my_orders(
+    order_status: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Flutter Vendor Dashboard: Returns vendor's own store orders.
+    Used by vendor_dashboard_screen.dart.
+    """
+    if current_user.get("account_type") != "VENDOR":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only vendors can access this endpoint.")
+
+    conn = get_db_connection()
+    vendor = conn.execute("SELECT id FROM vendors WHERE user_id = ?", (current_user["id"],)).fetchone()
+    if not vendor:
+        conn.close()
+        return {"orders": []}
+
+    store = conn.execute("SELECT id FROM stores WHERE vendor_id = ?", (vendor["id"],)).fetchone()
+    if not store:
+        conn.close()
+        return {"orders": []}
+
+    query = """
+        SELECT o.*, u.full_name as customer_name, u.phone as customer_phone_full
+        FROM orders o
+        JOIN users u ON o.customer_id = u.id
+        WHERE o.store_id = ?
+    """
+    params = [store["id"]]
+    if order_status:
+        query += " AND o.status = ?"
+        params.append(order_status)
+    query += " ORDER BY o.created_at DESC LIMIT 50"
+
+    orders = conn.execute(query, tuple(params)).fetchall()
+    result = []
+    for ord_row in orders:
+        o_dict = dict(ord_row)
+        items = conn.execute("SELECT * FROM order_items WHERE order_id = ?", (ord_row["id"],)).fetchall()
+        o_dict["items"] = [dict(it) for it in items]
+        # Mask customer phone for vendor privacy rules
+        if o_dict.get("customer_phone"):
+            raw = o_dict["customer_phone"]
+            o_dict["customer_phone"] = f"{raw[:4]}****{raw[-3:]}" if len(raw) >= 7 else "****"
+        result.append(o_dict)
+
+    conn.close()
+    return {"orders": result}
+
+
+@router.post("/{order_id}/update-status")
+def vendor_update_order_status(order_id: str, payload: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Flutter Vendor Dashboard: Simple status update endpoint.
+    Vendor can move order to: CONFIRMED, READY_FOR_PICKUP, CANCELLED.
+    Used by vendor_dashboard_screen.dart _updateOrderStatus().
+    """
+    new_status = str(payload.get("status", "")).strip()
+    vendor_allowed = ["CONFIRMED", "READY_FOR_PICKUP", "CANCELLED"]
+
+    if new_status not in vendor_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Vendor can only set status to: {vendor_allowed}"
+        )
+
+    conn = get_db_connection()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Verify vendor owns the store this order belongs to
+    if current_user.get("account_type") == "VENDOR":
+        vendor = conn.execute("SELECT id FROM vendors WHERE user_id = ?", (current_user["id"],)).fetchone()
+        store = conn.execute("SELECT id FROM stores WHERE vendor_id = ?", (vendor["id"],)).fetchone() if vendor else None
+        order = conn.execute(
+            "SELECT id, store_id, status FROM orders WHERE id = ? OR order_ref = ?", (order_id, order_id)
+        ).fetchone()
+        if not order or not store or order["store_id"] != store["id"]:
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't own this order.")
+        order_db_id = order["id"]
+        old_status = order["status"]
+    else:
+        order = conn.execute("SELECT id, status FROM orders WHERE id = ? OR order_ref = ?", (order_id, order_id)).fetchone()
+        if not order:
+            conn.close()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+        order_db_id = order["id"]
+        old_status = order["status"]
+
+    conn.execute("UPDATE orders SET status = ?, updated_at = ? WHERE id = ?", (new_status, now_iso, order_db_id))
+    conn.execute("""
+        INSERT INTO order_timeline (id, order_id, from_status, to_status, actor_id, actor_role, notes, timestamp)
+        VALUES (?, ?, ?, ?, ?, 'Vendor', 'Status updated via vendor dashboard', ?)
+    """, (str(uuid.uuid4()), order_db_id, old_status, new_status, current_user["id"], now_iso))
+    conn.commit()
+    conn.close()
+
+    return {"success": True, "order_id": order_db_id, "status": new_status}
