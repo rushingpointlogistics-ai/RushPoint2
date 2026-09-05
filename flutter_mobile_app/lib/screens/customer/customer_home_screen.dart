@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../services/whatsapp_service.dart';
 import '../auth/login_screen.dart';
@@ -165,7 +166,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF7F1D1D)),
                             icon: const Icon(Icons.add_card, size: 16),
                             label: const Text('Top Up'),
-                            onPressed: () {},
+                            onPressed: _showTopUpDialog,
                           ),
                         ],
                       ),
@@ -285,6 +286,95 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.local_shipping), label: 'Waybill'),
           BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Wallet'),
         ],
+      ),
+    );
+  }
+
+  void _showTopUpDialog() {
+    final amountController = TextEditingController();
+    bool isGenerating = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.account_balance_wallet, color: Color(0xFF7F1D1D)),
+              SizedBox(width: 8),
+              Text('Fund Wallet (Real)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Enter amount to deposit via Flutterwave (Bank Transfer, Card, USSD, OPay):', style: TextStyle(fontSize: 12, color: Colors.black87)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  prefixText: '₦ ',
+                  hintText: 'e.g. 5000',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: isGenerating
+                    ? null
+                    : () async {
+                        final amount = double.tryParse(amountController.text.trim()) ?? 0;
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        if (amount < 100) {
+                          scaffoldMessenger.showSnackBar(
+                            const SnackBar(content: Text('Minimum deposit is ₦100')),
+                          );
+                          return;
+                        }
+                        setDialogState(() => isGenerating = true);
+                        try {
+                          final res = await ApiService.post('/api/finance/wallet/generate-payment-link', {'amount': amount});
+                          if (res['success'] == true && res['payment_link'] != null) {
+                            final uri = Uri.parse(res['payment_link']);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                            if (ctx.mounted) {
+                              Navigator.of(ctx).pop();
+                            }
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('🔐 Flutterwave checkout opened! Once paid, refresh to see new balance.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            _loadData();
+                          } else {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(content: Text(res['detail'] ?? 'Could not start payment.')),
+                            );
+                          }
+                        } catch (e) {
+                          scaffoldMessenger.showSnackBar(
+                            const SnackBar(content: Text('Failed to reach payment gateway.')),
+                          );
+                        } finally {
+                          if (ctx.mounted) {
+                            setDialogState(() => isGenerating = false);
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7F1D1D)),
+                child: isGenerating
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Proceed to Secure Payment 🔐'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, prefer_const_constructors, prefer_const_literals_to_create_immutables, unused_field
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../services/whatsapp_service.dart';
 
@@ -183,7 +184,18 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       if (res['success'] == true) {
         final orderRef = res['order_ref'] ?? 'RP-ORD-SUCCESS';
         final podOtp = res['pod_otp'] ?? '8899';
-        _showSuccessDialog(orderRef, podOtp);
+        final bool requiresPayment = res['requires_payment'] == true;
+        final String? paymentLink = res['payment_link'];
+
+        if (requiresPayment && paymentLink != null && paymentLink.isNotEmpty) {
+          final uri = Uri.parse(paymentLink);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+          _showPaymentPendingDialog(orderRef, podOtp, paymentLink);
+        } else {
+          _showSuccessDialog(orderRef, podOtp);
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(res['detail'] ?? 'Failed to place order.'), backgroundColor: Colors.red),
@@ -196,6 +208,50 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     } finally {
       setState(() => _isPlacingOrder = false);
     }
+  }
+
+  void _showPaymentPendingDialog(String orderRef, String podOtp, String paymentLink) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.payment, color: Color(0xFFB91C1C), size: 28),
+            SizedBox(width: 8),
+            Text('Complete Payment', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Order $orderRef was created! Complete payment via Flutterwave to confirm.', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final uri = Uri.parse(paymentLink);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.open_in_browser, size: 18),
+              label: const Text('Re-open Payment Gateway 🔐'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB91C1C)),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('I will pay later / View My Orders'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSuccessDialog(String orderRef, String podOtp) {
@@ -426,7 +482,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         children: [
                           Text(_selectedPaymentMethod == 'OPAY' ? 'OPAY INSTANT TRANSFER ACCOUNT:' : 'YOUR DEDICATED VIRTUAL ACCOUNT:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFF166534) : const Color(0xFF1E40AF))),
                           const SizedBox(height: 4),
-                          Text('Bank: ${_selectedPaymentMethod == 'OPAY' ? 'OPay / ' + (_dedicatedAccount!['bank_name'] ?? '') : _dedicatedAccount!['bank_name']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          Text('Bank: ${_selectedPaymentMethod == 'OPAY' ? 'OPay / ${_dedicatedAccount!['bank_name'] ?? ''}' : _dedicatedAccount!['bank_name']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                           Text('Account No: ${_dedicatedAccount!['account_number']}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFF14532D) : const Color(0xFF1E3A8A), letterSpacing: 1)),
                           Text('Account Name: ${_dedicatedAccount!['account_name']}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                         ],
