@@ -34,6 +34,28 @@
     .app-screen-container { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
     .phone-notch { width: 130px; height: 22px; background: #1F2937; position: absolute; top: 0; left: 50%; transform: translateX(-50%); border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; z-index: 100; }
     .phone-status-bar { height: 36px; background: #FFF; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 0.7rem; font-weight: 700; color: var(--gray-700); flex-shrink: 0; z-index: 50; }
+
+    /* NATIVE FULLSCREEN MOBILE OPTIMIZATION (<768px) */
+    @media (max-width: 768px) {
+      .master-header { display: none !important; }
+      .admin-view-pane { display: none !important; }
+      .divider-handle { display: none !important; }
+      .mobile-view-pane {
+        width: 100% !important;
+        height: 100% !important;
+        padding: 0 !important;
+        background: #FFFFFF !important;
+      }
+      .phone-mockup-frame {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .phone-notch { display: none !important; }
+      .phone-status-bar { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -305,6 +327,10 @@
   // BOOT SEQUENCE
   // ==========================================
   document.addEventListener("DOMContentLoaded", async () => {
+    // If opened on phone or tablet screen, default to full mobile layout
+    if (window.innerWidth <= 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      setLayout("mobile");
+    }
     updateHeaderAuthBar();
     MobileApp.init();
     
