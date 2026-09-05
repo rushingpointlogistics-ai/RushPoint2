@@ -407,26 +407,27 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
                   _paymentMethodTile('WALLET', '🔒 Wallet Escrow Balance', 'Instant clearance • Zero processing fee', Icons.account_balance_wallet_outlined),
                   _paymentMethodTile('BANK_TRANSFER', '🏦 Direct Bank Transfer', 'Transfer to your dedicated virtual account', Icons.account_balance_outlined),
+                  _paymentMethodTile('OPAY', '🔴 Pay with OPay', 'Instant OPay transfer or fast dial *955#', Icons.payment_outlined),
                   _paymentMethodTile('CARD', '💳 Debit / Credit Card', 'Mastercard, Visa, Verve via Flutterwave', Icons.credit_card_outlined),
                   _paymentMethodTile('USSD', '📱 USSD Banking Code', '*737#, *901#, *894# instant payment', Icons.phone_android_outlined),
                   _paymentMethodTile('QR_CODE', '🔳 Scan to Pay (QR Code)', 'Quick scan with any bank mobile app', Icons.qr_code_scanner_outlined),
 
-                  if (_selectedPaymentMethod == 'BANK_TRANSFER' && _dedicatedAccount != null) ...[
+                  if ((_selectedPaymentMethod == 'BANK_TRANSFER' || _selectedPaymentMethod == 'OPAY') && _dedicatedAccount != null) ...[
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
+                        color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFFF0FDF4) : const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                        border: Border.all(color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFF86EFAC) : const Color(0xFFBFDBFE)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('YOUR DEDICATED VIRTUAL ACCOUNT:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF))),
+                          Text(_selectedPaymentMethod == 'OPAY' ? 'OPAY INSTANT TRANSFER ACCOUNT:' : 'YOUR DEDICATED VIRTUAL ACCOUNT:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFF166534) : const Color(0xFF1E40AF))),
                           const SizedBox(height: 4),
-                          Text('Bank: ${_dedicatedAccount!['bank_name']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          Text('Account No: ${_dedicatedAccount!['account_number']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF1E3A8A), letterSpacing: 1)),
+                          Text('Bank: ${_selectedPaymentMethod == 'OPAY' ? 'OPay / ' + (_dedicatedAccount!['bank_name'] ?? '') : _dedicatedAccount!['bank_name']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          Text('Account No: ${_dedicatedAccount!['account_number']}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _selectedPaymentMethod == 'OPAY' ? const Color(0xFF14532D) : const Color(0xFF1E3A8A), letterSpacing: 1)),
                           Text('Account Name: ${_dedicatedAccount!['account_name']}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                         ],
                       ),

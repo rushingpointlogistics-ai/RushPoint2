@@ -361,9 +361,9 @@ def place_order(req: CheckoutRequest, current_user: dict = Depends(get_current_u
     pod_otp = f"{secrets.randbelow(9000) + 1000}" # 4-digit security code
     now_iso = datetime.now(timezone.utc).isoformat()
     
-    # 1. Multi-Payment Processing (Gateway / Transfer / Card / USSD vs RP Wallet Escrow)
+    # 1. Multi-Payment Processing (Gateway / Transfer / OPay / Card / USSD / QR vs RP Wallet Escrow)
     method_upper = (req.payment_method or "WALLET").upper()
-    is_gateway = method_upper in ["FLUTTERWAVE", "CARD", "BANK_TRANSFER", "USSD", "QR_CODE"]
+    is_gateway = method_upper in ["FLUTTERWAVE", "CARD", "BANK_TRANSFER", "TRANSFER", "USSD", "QR_CODE", "OPAY", "PAY_WITH_OPAY"]
     
     if is_gateway:
         payment_method_label = method_upper

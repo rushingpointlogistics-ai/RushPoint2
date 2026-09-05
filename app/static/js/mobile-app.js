@@ -1464,91 +1464,171 @@ const MobileApp = {
     }
 
     let dedicatedAcc = null;
+    let walletBal = 0;
     try {
       const wRes = await API.get("/api/finance/wallet/dedicated-account");
       if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
+      if (wRes && wRes.wallet_balance !== undefined) walletBal = wRes.wallet_balance;
     } catch(e) {}
 
     const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
+    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank / OPay Virtual";
     const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
 
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px; overflow: hidden; padding: 0;">
+      <div class="modal-dialog" style="max-width: 410px; border-radius: 22px; overflow: hidden; padding: 0;">
         <!-- Header -->
-        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <div style="font-size: 0.68rem; font-weight: 800; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">256-Bit SSL Secured</div>
-            <div style="font-size: 1.15rem; font-weight: 900;">Multi-Payment Checkout</div>
+            <div style="font-size: 0.65rem; font-weight: 800; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">256-Bit SSL Secured Escrow</div>
+            <div style="font-size: 1.2rem; font-weight: 900;">Multi-Payment Checkout</div>
           </div>
-          <div style="font-size: 1.2rem; cursor: pointer;" onclick="this.closest('.modal-backdrop').remove()">✕</div>
+          <div style="font-size: 1.2rem; cursor: pointer; background: rgba(255,255,255,0.2); width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;" onclick="this.closest('.modal-backdrop').remove()">✕</div>
         </div>
 
-        <div style="padding: 16px; max-height: 80vh; overflow-y: auto;">
+        <div style="padding: 16px 18px; max-height: 80vh; overflow-y: auto;">
           <!-- Amount Banner -->
-          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 14px;">
-            <div style="font-size: 0.7rem; color: #7F1D1D; font-weight: 800;">TOTAL AMOUNT TO PAY</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #991B1B;">₦${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-            <div style="font-size: 0.68rem; color: #059669; font-weight: 700; margin-top: 2px;">🛡️ 4-Way Delivery Escrow Protected</div>
+          <div style="background: #FEF2F2; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px; text-align: center; margin-bottom: 14px;">
+            <div style="font-size: 0.68rem; color: #7F1D1D; font-weight: 800;">TOTAL AMOUNT DUE</div>
+            <div style="font-size: 1.8rem; font-weight: 900; color: #991B1B; letter-spacing: -0.5px;">₦${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            <div style="font-size: 0.68rem; color: #059669; font-weight: 800; margin-top: 2px;">🛡️ 4-Way Escrow: Released Only Upon 4-Digit Delivery PIN Verification</div>
           </div>
 
-          <!-- Payment Methods Selector -->
-          <div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Payment Option:</div>
+          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Payment Option:</div>
 
-          <!-- 1. Direct Bank Transfer Card -->
+          <!-- 1. WALLET CHECKOUT (If funds available) -->
+          <div style="background: ${walletBal >= totalAmount ? '#ECFDF5' : '#F8FAFC'}; border: 1.5px solid ${walletBal >= totalAmount ? '#86EFAC' : '#E2E8F0'}; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 0.82rem; font-weight: 900; color: ${walletBal >= totalAmount ? '#065F46' : '#64748B'};">🟢 RushPoint Customer Wallet</span>
+              <span style="font-size: 0.65rem; color: #64748B; font-weight: 700;">Balance: ₦${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+            </div>
+            ${walletBal >= totalAmount ? `
+              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'WALLET')" style="width: 100%; margin-top: 6px; background: #059669; color: #FFF; border: none; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 0.84rem; cursor: pointer;">
+                ⚡ Pay Instantly from Wallet (₦${totalAmount.toLocaleString()})
+              </button>
+            ` : `
+              <div style="font-size: 0.68rem; color: #DC2626; margin-top: 4px; font-weight: 600;">Insufficient wallet balance. Choose Bank Transfer, OPay, Card or USSD below.</div>
+            `}
+          </div>
+
+          <!-- 2. DIRECT BANK TRANSFER -->
           <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Direct Bank Transfer</span>
-              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">MOST POPULAR</span>
+              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT RECOGNITION</span>
             </div>
-            <div style="font-size: 0.72rem; color: #374151; margin-bottom: 8px;">Transfer from OPay, Kuda, GTBank, Zenith, PalmPay:</div>
+            <div style="font-size: 0.7rem; color: #374151; margin-bottom: 6px;">Transfer exact amount to your dedicated RushPoint account:</div>
             <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
               <div>
                 <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
-                <div style="font-size: 1.1rem; font-weight: 900; color: #14532D; letter-spacing: 1px;" id="checkout-bank-acc">${accNum}</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
                 <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
               </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Account number copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Account number copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
                 Copy
               </button>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'BANK_TRANSFER')" style="width: 100%; margin-top: 8px; background: #166534; color: #FFF; border: none; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'TRANSFER')" style="width: 100%; margin-top: 8px; background: #166534; color: #FFF; border: none; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">
               I Have Made This Transfer ➔
             </button>
           </div>
 
-          <!-- 2. Online Card Payment -->
+          <!-- 3. PAY WITH OPAY -->
+          <div style="background: #F0FDF4; border: 1.5px solid #22C55E; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.82rem; font-weight: 900; color: #15803D; display: flex; align-items: center; gap: 6px;">
+                <span>🔴</span> Pay with OPay
+              </span>
+              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">OPAY APP / *955#</span>
+            </div>
+            <div style="font-size: 0.7rem; color: #374151; margin-bottom: 6px;">Transfer directly from your OPay app to our instant receiving wallet:</div>
+            <div style="background: #FFF; border: 1px dashed #22C55E; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div>
+                <div style="font-size: 0.65rem; color: #64748B;">OPay Wallet / NUBAN</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #047857; letter-spacing: 1.5px;">${accNum}</div>
+                <div style="font-size: 0.65rem; color: #15803D; font-weight: 600;">${accName}</div>
+              </div>
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('OPay account copied! 📋', 'success')" style="background: #059669; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
+                Copy
+              </button>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <a href="tel:*955#" style="flex: 1; text-align: center; text-decoration: none; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 0.74rem;">
+                📱 Dial *955#
+              </a>
+              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'OPAY')" style="flex: 2; background: #059669; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 0.78rem; cursor: pointer;">
+                I Have Paid with OPay ➔
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. ONLINE CARD PAYMENT -->
           <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
             <div>
               <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">💳 Debit / Credit Card</div>
-              <div style="font-size: 0.68rem; color: #64748B;">Mastercard, Visa, Verve (Flutterwave)</div>
+              <div style="font-size: 0.68rem; color: #64748B;">Mastercard, Visa, Verve (Instant Gateway)</div>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'CARD')" style="background: #B91C1C; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'CARD')" style="background: #B91C1C; color: #FFF; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
               Pay with Card
             </button>
           </div>
 
-          <!-- 3. USSD Code -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">📱 USSD Banking Code</div>
-              <div style="font-size: 0.68rem; color: #64748B;">*737#, *901#, *894# Instant Dial</div>
+          <!-- 5. USSD BANKING -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div>
+                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">📱 USSD Banking Code</div>
+                <div style="font-size: 0.68rem; color: #64748B;">Dial instant code on your mobile phone</div>
+              </div>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'USSD')" style="background: #334155; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Pay via USSD
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
+              <a href="tel:*737#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">GTB *737#</a>
+              <a href="tel:*966#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Zenith *966#</a>
+              <a href="tel:*901#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Access *901#</a>
+              <a href="tel:*919#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">UBA *919#</a>
+              <a href="tel:*894#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">FirstBank *894#</a>
+              <a href="tel:*955#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">OPay *955#</a>
+            </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'USSD')" style="width: 100%; margin-top: 8px; background: #334155; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              Confirm USSD Payment ➔
             </button>
           </div>
 
-          <!-- 4. QR Code -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">🔳 Scan to Pay (QR Code)</div>
-              <div style="font-size: 0.68rem; color: #64748B;">Scan from your mobile bank application</div>
+          <!-- 6. SCAN QR CODE -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div>
+                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">🔳 Scan to Pay (QR Code)</div>
+                <div style="font-size: 0.68rem; color: #64748B;">Scan with OPay, PalmPay, or bank app</div>
+              </div>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'QR_CODE')" style="background: #0284C7; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Show QR
+            <div style="text-align: center; padding: 10px; background: #F8FAFC; border-radius: 8px; margin: 6px 0;">
+              <div style="display: inline-block; padding: 8px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 8px;">
+                <svg width="120" height="120" viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#ffffff" />
+                  <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
+                  <rect x="15" y="15" width="20" height="20" fill="#ffffff" />
+                  <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
+                  <rect x="60" y="10" width="30" height="30" fill="#0f172a" />
+                  <rect x="65" y="15" width="20" height="20" fill="#ffffff" />
+                  <rect x="70" y="20" width="10" height="10" fill="#0f172a" />
+                  <rect x="10" y="60" width="30" height="30" fill="#0f172a" />
+                  <rect x="15" y="65" width="20" height="20" fill="#ffffff" />
+                  <rect x="20" y="70" width="10" height="10" fill="#0f172a" />
+                  <circle cx="50" cy="50" r="12" fill="#B91C1C" />
+                  <text x="50" y="54" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="900">RP</text>
+                  <rect x="45" y="15" width="10" height="10" fill="#0f172a" />
+                  <rect x="45" y="75" width="10" height="10" fill="#0f172a" />
+                  <rect x="75" y="55" width="15" height="15" fill="#0f172a" />
+                  <rect x="55" y="75" width="15" height="15" fill="#0f172a" />
+                </svg>
+              </div>
+              <div style="font-size: 0.65rem; color: #64748B; margin-top: 4px;">Point camera or OPay scanner at this QR code</div>
+            </div>
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'QR_CODE')" style="width: 100%; background: #0284C7; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
+              I Have Scanned & Paid ➔
             </button>
           </div>
         </div>
@@ -3553,6 +3633,28 @@ const MobileApp = {
     }
   },
 
+  async getBanksList() {
+    if (this._cachedBanks && this._cachedBanks.length > 0) return this._cachedBanks;
+    try {
+      const res = await API.get("/api/finance/banks");
+      if (res && res.banks) {
+        this._cachedBanks = res.banks;
+        return this._cachedBanks;
+      }
+    } catch (e) {}
+    return [
+      { code: "999992", name: "OPay (PayCom)", icon: "🔴", popular: true },
+      { code: "999991", name: "PalmPay", icon: "🌴", popular: true },
+      { code: "50515", name: "Moniepoint MFB", icon: "🔵", popular: true },
+      { code: "50211", name: "Kuda Bank", icon: "🟣", popular: true },
+      { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧", popular: true },
+      { code: "057", name: "Zenith Bank", icon: "🔴", popular: true },
+      { code: "044", name: "Access Bank", icon: "🔶", popular: true },
+      { code: "011", name: "First Bank of Nigeria", icon: "🐘", popular: true },
+      { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴", popular: true }
+    ];
+  },
+
   async showTopUpModal(currentBalance) {
     let dedicatedAcc = null;
     try {
@@ -3561,65 +3663,126 @@ const MobileApp = {
     } catch(e) {}
 
     const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
+    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank / OPay Virtual";
     const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
 
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 370px; border-radius: 20px; overflow: hidden; padding: 0;">
-        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 1.1rem; font-weight: 900; margin: 0;">💰 Fund RushPoint Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 390px; border-radius: 22px; overflow: hidden; padding: 0;">
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">💰 Fund RushPoint Wallet</h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="padding: 16px;">
-          <!-- Balance Display -->
-          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.75rem; color: #64748B; font-weight: 700;">Current Balance</span>
-            <span style="font-size: 1.25rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+        <div style="padding: 16px 18px; max-height: 82vh; overflow-y: auto;">
+          <!-- Current Balance -->
+          <div style="background: #FEF2F2; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.75rem; color: #64748B; font-weight: 800; text-transform: uppercase;">Current Balance</span>
+            <span style="font-size: 1.35rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
           </div>
 
-          <!-- 1. DEDICATED VIRTUAL ACCOUNT CARD -->
-          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Top-Up Method:</div>
+
+          <!-- 1. DEDICATED BANK TRANSFER -->
+          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.8rem; font-weight: 900; color: #166534;">🏦 Your Dedicated Account Number</span>
+              <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Permanent Virtual Account</span>
               <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT CREDIT</span>
             </div>
-            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 8px;">Transfer from any bank app (OPay, Kuda, GTB, Zenith, PalmPay):</div>
-            
-            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 6px;">Transfer any amount from any bank app to credit wallet automatically:</div>
+            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">${bankName}</div>
-                <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
-                <div style="font-size: 0.68rem; color: #166534; font-weight: 600;">${accName}</div>
+                <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
+                <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
               </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('✅ Account Copied: ${accNum} (${bankName})! Paste in your bank app.', 'success')" style="background: #166534; color: #FFF; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-                📋 Copy
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('✅ Copied: ${accNum}! Paste in bank app.', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
+                Copy
               </button>
             </div>
           </div>
 
-          <div style="text-align: center; color: #94A3B8; font-size: 0.72rem; font-weight: 700; margin-bottom: 10px;">— OR PAY WITH CARD / USSD —</div>
-
-          <!-- 2. FLUTTERWAVE GATEWAY -->
-          <form onsubmit="MobileApp.executeTopUp(event)">
-            <div class="rp-form-group" style="margin-bottom: 8px;">
-              <label class="rp-label" style="font-size: 0.75rem;">Top Up Amount (NGN)</label>
-              <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" required style="border-radius: 10px;">
-              
-              <!-- Quick Preset Amount Chips -->
-              <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
-                <button type="button" onclick="document.getElementById('topup-amount').value=1000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦1,000</button>
-                <button type="button" onclick="document.getElementById('topup-amount').value=2000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦2,000</button>
-                <button type="button" onclick="document.getElementById('topup-amount').value=5000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦5,000</button>
-                <button type="button" onclick="document.getElementById('topup-amount').value=10000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 6px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; color: #1E293B; cursor: pointer;">+₦10,000</button>
-              </div>
+          <!-- 2. PAY WITH OPAY -->
+          <div style="background: #F0FDF4; border: 1.5px solid #22C55E; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.82rem; font-weight: 900; color: #15803D; display: flex; align-items: center; gap: 6px;">
+                <span>🔴</span> Pay with OPay
+              </span>
+              <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">OPAY / *955#</span>
             </div>
-            <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800; font-size: 0.88rem;">
-              Pay with Flutterwave (Card / USSD) 💳
-            </button>
-          </form>
+            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 6px;">Send directly from OPay app to your assigned account number:</div>
+            <div style="background: #FFF; border: 1px dashed #22C55E; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div>
+                <div style="font-size: 0.65rem; color: #64748B;">OPay Transfer NUBAN</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #047857; letter-spacing: 1.5px;">${accNum}</div>
+              </div>
+              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('OPay account copied! 📋', 'success')" style="background: #059669; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
+                Copy
+              </button>
+            </div>
+            <a href="tel:*955#" style="display: block; text-align: center; text-decoration: none; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; padding: 7px; border-radius: 8px; font-weight: 800; font-size: 0.74rem;">
+              📱 Dial OPay *955# Fast Top-up
+            </a>
+          </div>
+
+          <!-- 3. DEBIT / CREDIT CARD -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 6px;">💳 Debit / Credit Card Gateway</div>
+            <form onsubmit="MobileApp.executeTopUp(event)">
+              <div class="rp-form-group" style="margin-bottom: 8px;">
+                <input type="number" id="topup-amount" class="rp-input" placeholder="Amount to fund (min ₦100)" min="100" required style="border-radius: 10px; font-weight: 800;">
+                <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                  <button type="button" onclick="document.getElementById('topup-amount').value=1000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦1k</button>
+                  <button type="button" onclick="document.getElementById('topup-amount').value=2000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦2k</button>
+                  <button type="button" onclick="document.getElementById('topup-amount').value=5000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦5k</button>
+                  <button type="button" onclick="document.getElementById('topup-amount').value=10000" style="flex:1; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 5px 4px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; cursor: pointer;">+₦10k</button>
+                </div>
+              </div>
+              <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 10px; border-radius: 10px; background: #B91C1C; font-weight: 800; font-size: 0.82rem;">
+                Pay with Card (Mastercard / Visa / Verve) 💳
+              </button>
+            </form>
+          </div>
+
+          <!-- 4. USSD BANKING -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 6px;">📱 USSD Fast Top-Up</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+              <a href="tel:*737#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">GTB *737#</a>
+              <a href="tel:*966#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Zenith *966#</a>
+              <a href="tel:*901#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Access *901#</a>
+              <a href="tel:*919#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">UBA *919#</a>
+              <a href="tel:*894#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">FirstBank *894#</a>
+              <a href="tel:*955#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">OPay *955#</a>
+            </div>
+          </div>
+
+          <!-- 5. QR CODE SCAN -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; margin-bottom: 4px;">🔳 Scan NIBSS / OPay QR Code</div>
+            <div style="display: inline-block; padding: 6px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 8px; margin: 4px 0;">
+              <svg width="100" height="100" viewBox="0 0 100 100">
+                <rect width="100" height="100" fill="#ffffff" />
+                <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
+                <rect x="15" y="15" width="20" height="20" fill="#ffffff" />
+                <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
+                <rect x="60" y="10" width="30" height="30" fill="#0f172a" />
+                <rect x="65" y="15" width="20" height="20" fill="#ffffff" />
+                <rect x="70" y="20" width="10" height="10" fill="#0f172a" />
+                <rect x="10" y="60" width="30" height="30" fill="#0f172a" />
+                <rect x="15" y="65" width="20" height="20" fill="#ffffff" />
+                <rect x="20" y="70" width="10" height="10" fill="#0f172a" />
+                <circle cx="50" cy="50" r="10" fill="#059669" />
+                <text x="50" y="54" font-size="8" text-anchor="middle" fill="#ffffff" font-weight="900">RP</text>
+                <rect x="45" y="15" width="10" height="10" fill="#0f172a" />
+                <rect x="45" y="75" width="10" height="10" fill="#0f172a" />
+                <rect x="75" y="55" width="15" height="15" fill="#0f172a" />
+                <rect x="55" y="75" width="15" height="15" fill="#0f172a" />
+              </svg>
+            </div>
+            <div style="font-size: 0.65rem; color: #64748B;">Scan using your bank or OPay mobile application</div>
+          </div>
         </div>
       </div>
     `;
@@ -3635,7 +3798,7 @@ const MobileApp = {
     }
 
     const btn = document.getElementById("btn-submit-topup");
-    if (btn) { btn.disabled = true; btn.textContent = "Connecting Flutterwave Gateway… 🔐"; }
+    if (btn) { btn.disabled = true; btn.textContent = "Connecting Gateway… 🔐"; }
 
     try {
       const res = await API.post("/api/finance/payment/initialize", {
@@ -3645,44 +3808,154 @@ const MobileApp = {
       });
       document.querySelector(".rp-modal-overlay")?.remove();
       if (res.payment_link && res.gateway === "FLUTTERWAVE_LIVE") {
-        API.showToast("Redirecting to Flutterwave checkout…", "info");
+        API.showToast("Redirecting to online checkout…", "info");
         window.location.href = res.payment_link;
       } else {
         API.showToast("Deposit reference generated: " + res.reference, "info");
         this.render();
       }
     } catch (err) {
-      if (btn) { btn.disabled = false; btn.textContent = "Pay with Flutterwave 💳"; }
+      if (btn) { btn.disabled = false; btn.textContent = "Pay with Card 💳"; }
     }
   },
 
-  showWithdrawalModal(currentBalance, bankName, accNumber, accName) {
+  async onTransferAccountChanged() {
+    const accInput = document.getElementById("wdr-account-number");
+    const bankSelect = document.getElementById("wdr-bank-select");
+    const badge = document.getElementById("wdr-verified-badge");
+    const nameInput = document.getElementById("wdr-account-name");
+    const submitBtn = document.getElementById("wdr-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      if (submitBtn) submitBtn.disabled = (accNum.length < 10);
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Direct Instant Settlement</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Account verification pending. Please verify 10-digit number.`;
+    }
+  },
+
+  async showWithdrawalModal(currentBalance) {
+    const banks = await this.getBanksList();
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 360px; border-radius: 20px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1.1rem; font-weight: 800; color: #1E293B;">💳 Withdraw Wallet Earnings</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 400px; border-radius: 24px; overflow: hidden; padding: 0;">
+        <!-- OPay Transfer Header -->
+        <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.4rem;">💸</span>
+              <div>
+                <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0; letter-spacing: -0.3px;">Transfer to Bank</h3>
+                <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay-Speed Instant NIBSS Settlement</div>
+              </div>
+            </div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 32px; height: 32px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="background: #FFF5F5; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 0.75rem;">
-          <div style="color: #64748B; margin-bottom: 4px;">Available Balance: <strong style="font-size: 1rem; color: #B91C1C;">₦${currentBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
-          <div style="border-top: 1px dashed #FECACA; padding-top: 6px; margin-top: 6px;">
-            <div>Bank: <strong>${bankName}</strong></div>
-            <div>Account: <code>${accNumber}</code> (${accName})</div>
+        <div style="padding: 20px; max-height: 82vh; overflow-y: auto;">
+          <!-- Balance Pill -->
+          <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.68rem; color: #166534; font-weight: 800; text-transform: uppercase;">Available Balance</div>
+              <div style="font-size: 1.35rem; font-weight: 900; color: #15803D;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            </div>
+            <span class="badge" style="background: #059669; color: #FFF; font-size: 0.62rem; padding: 4px 8px; font-weight: 800;">FREE TRANSFER</span>
           </div>
-        </div>
 
-        <form onsubmit="MobileApp.executeWithdrawal(event, ${currentBalance})">
-          <div class="rp-form-group">
-            <label class="rp-label">Withdrawal Amount (NGN)</label>
-            <input type="number" id="wdr-amount" class="rp-input" placeholder="e.g. 10000" max="${currentBalance}" min="100" required value="${Math.min(currentBalance, 10000)}" style="border-radius: 10px;">
-          </div>
-          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800;">
-            Confirm Bank Transfer 💸
-          </button>
-        </form>
+          <form onsubmit="MobileApp.executeWithdrawal(event, ${currentBalance})">
+            <input type="hidden" id="wdr-account-name" value="">
+
+            <!-- 1. Destination Bank -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">1. Select Destination Bank</label>
+              <select id="wdr-bank-select" class="rp-select" onchange="MobileApp.onTransferAccountChanged()" required style="border-radius: 12px; font-weight: 700; padding: 10px 12px; font-size: 0.88rem;">
+                <option value="">-- Choose Bank (OPay, PalmPay, Kuda, GTB...) --</option>
+                ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- 2. Account Number -->
+            <div class="rp-form-group" style="margin-bottom: 10px;">
+              <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">2. 10-Digit NUBAN Account Number</label>
+              <input type="text" id="wdr-account-number" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="MobileApp.onTransferAccountChanged()" required style="border-radius: 12px; font-size: 1.15rem; font-weight: 800; letter-spacing: 1px; padding: 10px 12px;">
+            </div>
+
+            <!-- Real-Time Verified Recipient Name Card -->
+            <div id="wdr-verified-badge" style="display: none; border-radius: 12px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 14px; font-size: 0.76rem;"></div>
+
+            <!-- 3. Amount -->
+            <div class="rp-form-group" style="margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B; margin: 0;">3. Transfer Amount (NGN)</label>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=${currentBalance}; document.getElementById('wdr-summary-debit').innerText='₦'+Number(${currentBalance}).toLocaleString()" style="background: none; border: none; color: #059669; font-size: 0.72rem; font-weight: 800; cursor: pointer; text-decoration: underline;">Transfer All</button>
+              </div>
+              <input type="number" id="wdr-amount" class="rp-input" placeholder="Min ₦100" min="100" max="${currentBalance}" required value="${Math.min(currentBalance, 5000)}" oninput="document.getElementById('wdr-summary-debit').innerText = '₦' + Number(this.value || 0).toLocaleString()" style="border-radius: 12px; font-size: 1.1rem; font-weight: 800; padding: 10px 12px;">
+
+              <!-- Quick Amount Chips -->
+              <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                <button type="button" onclick="document.getElementById('wdr-amount').value=1000; document.getElementById('wdr-summary-debit').innerText='₦1,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦1k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=2000; document.getElementById('wdr-summary-debit').innerText='₦2,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦2k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=5000; document.getElementById('wdr-summary-debit').innerText='₦5,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦5k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=10000; document.getElementById('wdr-summary-debit').innerText='₦10,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦10k</button>
+              </div>
+            </div>
+
+            <!-- Fee & Total Summary -->
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.74rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #64748B;">
+                <span>Transfer Fee:</span>
+                <strong style="color: #059669;">₦0.00 (FREE)</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 6px; font-size: 0.84rem; font-weight: 900; color: #1E293B;">
+                <span>Total Debit:</span>
+                <span id="wdr-summary-debit" style="color: #059669;">₦${Math.min(currentBalance, 5000).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <button type="submit" id="wdr-submit-btn" class="btn-primary" style="width: 100%; justify-content: center; padding: 13px; border-radius: 14px; background: #059669; border-color: #047857; font-weight: 900; font-size: 0.92rem; box-shadow: 0 4px 12px rgba(5,150,105,0.3);">
+              Confirm & Send Transfer 🚀
+            </button>
+          </form>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -3691,18 +3964,100 @@ const MobileApp = {
   async executeWithdrawal(e, currentBalance) {
     e.preventDefault();
     const amount = parseFloat(document.getElementById("wdr-amount").value);
+    const bankSelect = document.getElementById("wdr-bank-select");
+    const bankCode = bankSelect.value;
+    const bankName = bankSelect.options[bankSelect.selectedIndex]?.text || "Bank Transfer";
+    const accountNumber = document.getElementById("wdr-account-number").value.trim();
+    const accountName = document.getElementById("wdr-account-name").value.trim();
+
     if (!amount || amount <= 0 || amount > currentBalance) {
-      API.showToast("Invalid withdrawal amount", "error");
+      API.showToast("Invalid withdrawal amount or insufficient balance", "error");
+      return;
+    }
+    if (!accountNumber || accountNumber.length !== 10) {
+      API.showToast("Please enter a valid 10-digit account number", "error");
       return;
     }
 
+    const btn = document.getElementById("wdr-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Processing OPay Transfer… ⏳"; }
+
     try {
-      const res = await API.post("/api/finance/wallet/withdraw", { amount });
+      const res = await API.post("/api/finance/wallet/withdraw", {
+        amount,
+        bank_code: bankCode,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName
+      });
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(`Transfer of ₦${amount.toLocaleString()} initiated! Ref: ${res.reference}`, "success");
+      this.showTransferSuccessReceipt(res.transfer_details || {
+        amount,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName,
+        reference: res.reference
+      });
       this.render();
       if (window.AdminPortal) window.AdminPortal.init();
-    } catch (err) {}
+    } catch (err) {
+      API.showToast(err.message || "Transfer failed. Please check details.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "Confirm & Send Transfer 🚀"; }
+    }
+  },
+
+  showTransferSuccessReceipt(details) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 360px; border-radius: 24px; text-align: center; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+        <div style="width: 60px; height: 60px; border-radius: 50%; background: #DCFCE7; color: #16A34A; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 14px;">
+          ✓
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; margin-bottom: 4px;">Transfer Successful!</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-bottom: 16px;">Funds have been sent via Instant NIBSS / OPay Clearing</div>
+
+        <!-- Amount Box -->
+        <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 14px; padding: 14px; margin-bottom: 16px;">
+          <div style="font-size: 0.72rem; color: #166534; font-weight: 700;">AMOUNT SENT</div>
+          <div style="font-size: 1.8rem; font-weight: 900; color: #15803D;">₦${(details.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+        </div>
+
+        <!-- Receipt Rows -->
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 18px; font-size: 0.74rem; text-align: left;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Recipient Name:</span>
+            <strong style="color: #1E293B;">${details.account_name || 'Verified Beneficiary'}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Bank Name:</span>
+            <strong style="color: #1E293B;">${details.bank_name || 'Commercial Bank'}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Account Number:</span>
+            <code>${details.account_number}</code>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Transfer Fee:</span>
+            <strong style="color: #059669;">₦0.00 (FREE)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px dashed #CBD5E1; padding-top: 6px;">
+            <span style="color: #64748B;">Transaction Ref:</span>
+            <code style="font-size: 0.7rem;">${details.reference}</code>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button onclick="navigator.clipboard.writeText('${details.reference}'); API.showToast('Reference copied! 📋', 'success')" class="btn-secondary" style="flex: 1; justify-content: center; font-size: 0.78rem;">
+            Copy Ref
+          </button>
+          <button onclick="this.closest('.modal-backdrop').remove()" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; border-color: #047857; font-weight: 800; font-size: 0.82rem;">
+            Done 👍
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
   },
 
   async toggleRiderShift(status) {

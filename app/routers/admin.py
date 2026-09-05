@@ -450,16 +450,20 @@ def set_store_custom_delivery_fee(store_id: str, payload: dict, current_user: di
 def admin_withdraw_rider_commission(rider_id: str, payload: dict, current_user: dict = Depends(require_role(["ADMIN", "Super Admin", "Finance Officer"]))):
     """
     Admin withdraws rider's earned commission to their bank/cash on behalf of riders who lack smartphone infrastructure.
+    Supports OPay/NUBAN bank transfer with verified recipient name, or counter cash disbursement.
     """
     amount = float(payload.get("amount", 0.0))
-    bank_account = payload.get("bank_account", "Cash / Bank Transfer Disbursement")
-    notes = payload.get("notes", "Disbursed to rider directly")
+    payout_channel = str(payload.get("payout_channel", "BANK_TRANSFER")).upper() # BANK_TRANSFER or CASH
+    bank_name = str(payload.get("bank_name", "")).strip()
+    account_number = str(payload.get("account_number", "")).strip()
+    account_name = str(payload.get("account_name", "")).strip()
+    notes = str(payload.get("notes", "")).strip()
     
     if amount <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Positive disbursement amount required.")
         
     conn = get_db_connection()
-    rider = conn.execute("SELECT r.*, u.full_name FROM riders r JOIN users u ON r.user_id = u.id WHERE r.id = ?", (rider_id,)).fetchone()
+    rider = conn.execute("SELECT r.*, u.full_name, u.phone FROM riders r JOIN users u ON r.user_id = u.id WHERE r.id = ?", (rider_id,)).fetchone()
     if not rider:
         conn.close()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rider not found.")
@@ -472,10 +476,23 @@ def admin_withdraw_rider_commission(rider_id: str, payload: dict, current_user: 
     now_iso = datetime.now(timezone.utc).isoformat()
     new_bal = r_wallet["balance"] - amount
     conn.execute("UPDATE wallets SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, now_iso, r_wallet["id"]))
+    
+    tx_ref = f"RP-TXN-WDR-RDR-{secrets.randbelow(900000)+100000}"
+    if payout_channel == "CASH":
+        desc = f"Admin Cash Disbursement: {notes or 'Cash Handover at Hub Dispatch'}"
+    else:
+        desc = f"Admin Bank Transfer to {bank_name or 'Bank'}"
+        if account_number:
+            desc += f" - {account_number}"
+        if account_name:
+            desc += f" ({account_name})"
+        if notes:
+            desc += f" | Memo: {notes}"
+
     conn.execute("""
         INSERT INTO wallet_transactions (id, wallet_id, user_id, reference, type, amount, description, running_balance, created_at)
         VALUES (?, ?, ?, ?, 'DEBIT', ?, ?, ?, ?)
-    """, (str(uuid.uuid4()), r_wallet["id"], rider["user_id"], f"RP-TXN-WDR-RDR-{secrets.randbelow(900000)+100000}", amount, f"Admin Disbursed Payout ({bank_account}): {notes}", new_bal, now_iso))
+    """, (str(uuid.uuid4()), r_wallet["id"], rider["user_id"], tx_ref, amount, desc, new_bal, now_iso))
     
     conn.commit()
     conn.close()
@@ -484,7 +501,17 @@ def admin_withdraw_rider_commission(rider_id: str, payload: dict, current_user: 
         "success": True,
         "message": f"Successfully disbursed ₦{amount:,.2f} to rider {rider['full_name']} ({rider['rider_ref']}). New Balance: ₦{new_bal:,.2f}.",
         "disbursed_amount": amount,
-        "remaining_balance": new_bal
+        "remaining_balance": new_bal,
+        "reference": tx_ref,
+        "transfer_details": {
+            "channel": payout_channel,
+            "bank_name": bank_name,
+            "account_number": account_number,
+            "account_name": account_name,
+            "amount": amount,
+            "reference": tx_ref,
+            "timestamp": now_iso
+        }
     }
 
 @router.post("/users/{user_id}/reset-password")

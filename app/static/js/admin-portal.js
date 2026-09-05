@@ -4857,63 +4857,194 @@ const AdminPortal = {
     try {
       const res = await API.get("/api/riders/");
       const riders = res?.riders || [];
+      let banks = [];
+      try {
+        const bRes = await API.get("/api/finance/banks");
+        banks = bRes?.banks || [];
+      } catch (e) {}
+      if (!banks || banks.length === 0) {
+        banks = [
+          { code: "999992", name: "OPay (PayCom)", icon: "🔴" },
+          { code: "999991", name: "PalmPay", icon: "🌴" },
+          { code: "50515", name: "Moniepoint MFB", icon: "🔵" },
+          { code: "50211", name: "Kuda Bank", icon: "🟣" },
+          { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧" },
+          { code: "057", name: "Zenith Bank", icon: "🔴" },
+          { code: "044", name: "Access Bank", icon: "🔶" },
+          { code: "011", name: "First Bank of Nigeria", icon: "🐘" },
+          { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴" }
+        ];
+      }
 
       const modal = document.createElement("div");
       modal.className = "modal-backdrop rp-modal-overlay";
       modal.innerHTML = `
-        <div class="modal-dialog" style="max-width: 480px; border-radius: 18px;">
-          <div class="modal-header">
-            <h3 style="font-size: 1.1rem; font-weight: 800; color: #92400E; display: flex; align-items: center; gap: 8px;">
-              <span>🛵</span> Disburse Offline Rider Payout
-            </h3>
-            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        <div class="modal-dialog" style="max-width: 490px; border-radius: 20px; overflow: hidden; padding: 0;">
+          <div style="background: linear-gradient(135deg, #92400E 0%, #D97706 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.4rem;">🛵</span>
+              <div>
+                <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">Disburse Offline Rider Payout</h3>
+                <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay Transfer & Cash Proxy for Feature Phone Couriers</div>
+              </div>
+            </div>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
           </div>
 
-          <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #78350F;">
-            Withdraw and disburse cash or direct bank transfer on behalf of riders with basic button phones (Nokia/itel) who lack smartphone access.
+          <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto;">
+            <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #78350F;">
+              Withdraw and disburse earnings on behalf of couriers without smartphones (Nokia/itel). Supports instant NUBAN/OPay transfer with automatic account name resolution.
+            </div>
+
+            <form onsubmit="AdminPortal.handleOfflineRiderPayoutSubmit(event)">
+              <input type="hidden" id="adm-payout-account-name" value="">
+
+              <!-- 1. Select Rider -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">1. Select Courier / Rider</label>
+                <select id="adm-offline-rdr-select" class="rp-select" onchange="AdminPortal.onOfflineRiderSelected(this)" required style="border-radius: 10px; font-weight: 700;">
+                  <option value="">-- Choose Rider --</option>
+                  ${riders.map(r => `
+                    <option value="${r.id}" data-name="${r.full_name}" data-balance="${r.wallet_balance || 0}" data-ref="${r.rider_ref}" data-phone="${r.phone || ''}">
+                      ${r.full_name} (${r.rider_ref} - Available: ₦${(r.wallet_balance || 0).toLocaleString()})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <!-- Rider Balance Box -->
+              <div id="adm-offline-rdr-balance-box" style="display: none; background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.78rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #166534; font-weight: 800;">Available Earned Balance:</span>
+                  <strong id="adm-offline-rdr-bal" style="color: #15803D; font-size: 1.25rem; font-weight: 900;">₦0</strong>
+                </div>
+              </div>
+
+              <!-- 2. Payout Channel Selector -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">2. Disbursement Method</label>
+                <div style="display: flex; gap: 8px;">
+                  <label style="flex: 1; border: 1.5px solid #D97706; background: #FFFBEB; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                    <input type="radio" name="adm-payout-chan" value="BANK_TRANSFER" checked onchange="AdminPortal.togglePayoutChannel('BANK_TRANSFER')">
+                    🏦 Bank / OPay Transfer
+                  </label>
+                  <label style="flex: 1; border: 1.5px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                    <input type="radio" name="adm-payout-chan" value="CASH" onchange="AdminPortal.togglePayoutChannel('CASH')">
+                    💵 Counter Cash Handover
+                  </label>
+                </div>
+              </div>
+
+              <!-- Bank Transfer Fields -->
+              <div id="adm-bank-transfer-fields">
+                <!-- Select Bank -->
+                <div class="rp-form-group" style="margin-bottom: 10px;">
+                  <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">Destination Bank</label>
+                  <select id="adm-payout-bank" class="rp-select" onchange="AdminPortal.onAdminPayoutAccountTyped()" style="border-radius: 10px; font-weight: 700;">
+                    <option value="">-- Select Bank (OPay, PalmPay, Moniepoint, GTB...) --</option>
+                    ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+                  </select>
+                </div>
+
+                <!-- Account Number -->
+                <div class="rp-form-group" style="margin-bottom: 10px;">
+                  <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">10-Digit NUBAN Account Number</label>
+                  <input type="text" id="adm-payout-acc-num" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="AdminPortal.onAdminPayoutAccountTyped()" style="border-radius: 10px; font-size: 1.1rem; font-weight: 800; letter-spacing: 1px;">
+                </div>
+
+                <!-- Real-time Verified Account Banner -->
+                <div id="adm-payout-verified-badge" style="display: none; border-radius: 10px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 12px; font-size: 0.76rem;"></div>
+              </div>
+
+              <!-- 3. Amount -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Amount (NGN)</label>
+                <input type="number" id="adm-offline-rdr-amount" class="rp-input" min="100" placeholder="e.g. 5000" required style="border-radius: 10px; font-size: 1.1rem; font-weight: 800;">
+              </div>
+
+              <!-- 4. Notes / Memo -->
+              <div class="rp-form-group" style="margin-bottom: 14px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Memo / Receipt Note</label>
+                <input type="text" id="adm-offline-rdr-note" class="rp-input" value="Disbursed at Katsina Hub Dispatch Desk" required style="border-radius: 10px;">
+              </div>
+
+              <div style="display: flex; gap: 10px; margin-top: 16px;">
+                <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center; border-radius: 12px;">
+                  Cancel
+                </button>
+                <button type="submit" id="adm-offline-submit-btn" class="btn-primary" style="flex: 2; justify-content: center; background: #D97706; border-color: #B45309; font-weight: 800; border-radius: 12px; padding: 12px;">
+                  💸 Disburse Payout Now
+                </button>
+              </div>
+            </form>
           </div>
-
-          <form onsubmit="AdminPortal.handleOfflineRiderPayoutSubmit(event)">
-            <div class="rp-form-group">
-              <label class="rp-label">Select Rider</label>
-              <select id="adm-offline-rdr-select" class="rp-select" onchange="AdminPortal.onOfflineRiderSelected(this)" required>
-                <option value="">-- Choose Rider --</option>
-                ${riders.map(r => `
-                  <option value="${r.id}" data-name="${r.full_name}" data-balance="${r.wallet_balance || 0}" data-ref="${r.rider_ref}">
-                    ${r.full_name} (${r.rider_ref} - ₦${(r.wallet_balance || 0).toLocaleString()})
-                  </option>
-                `).join('')}
-              </select>
-            </div>
-
-            <div id="adm-offline-rdr-balance-box" style="display: none; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px; margin-bottom: 12px; font-size: 0.78rem;">
-              <div>Available Earned Balance: <strong id="adm-offline-rdr-bal" style="color: #059669; font-size: 1rem;">₦0</strong></div>
-            </div>
-
-            <div class="rp-form-group">
-              <label class="rp-label">Disbursement Amount (NGN)</label>
-              <input type="number" id="adm-offline-rdr-amount" class="rp-input" min="100" placeholder="e.g. 5000" required>
-            </div>
-
-            <div class="rp-form-group">
-              <label class="rp-label">Disbursement Channel / Receipt Note</label>
-              <input type="text" id="adm-offline-rdr-note" class="rp-input" value="Cash Handover at Katsina Hub Dispatch Counter" required>
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-top: 16px;">
-              <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
-                Cancel
-              </button>
-              <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #D97706; border-color: #B45309; font-weight: 800;">
-                💸 Disburse Payout Now
-              </button>
-            </div>
-          </form>
         </div>
       `;
       document.body.appendChild(modal);
     } catch (e) {
       API.showToast("Could not load riders list", "error");
+    }
+  },
+
+  togglePayoutChannel(chan) {
+    const fields = document.getElementById("adm-bank-transfer-fields");
+    const note = document.getElementById("adm-offline-rdr-note");
+    if (fields) {
+      fields.style.display = (chan === "CASH") ? "none" : "block";
+    }
+    if (note) {
+      note.value = (chan === "CASH") ? "Cash Handover at Hub Dispatch Counter" : "Bank Transfer Disbursed to Courier Account";
+    }
+  },
+
+  async onAdminPayoutAccountTyped() {
+    const accInput = document.getElementById("adm-payout-acc-num");
+    const bankSelect = document.getElementById("adm-payout-bank");
+    const badge = document.getElementById("adm-payout-verified-badge");
+    const nameInput = document.getElementById("adm-payout-account-name");
+    const submitBtn = document.getElementById("adm-offline-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Instant Transfer Ready</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.textContent = `💸 Disburse to ${res.account_name.split(' ')[0]}`;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Could not verify account. Please check the 10 digits.`;
     }
   },
 
@@ -4940,21 +5071,38 @@ const AdminPortal = {
     const selectEl = document.getElementById("adm-offline-rdr-select");
     const riderId = selectEl.value;
     const amount = parseFloat(document.getElementById("adm-offline-rdr-amount").value);
-    const bank_account = document.getElementById("adm-offline-rdr-note").value.trim();
+    const channelRadio = document.querySelector('input[name="adm-payout-chan"]:checked');
+    const payout_channel = channelRadio ? channelRadio.value : "BANK_TRANSFER";
+    const bankSelect = document.getElementById("adm-payout-bank");
+    const bank_name = bankSelect ? bankSelect.options[bankSelect.selectedIndex]?.text : "";
+    const account_number = document.getElementById("adm-payout-acc-num")?.value.trim() || "";
+    const account_name = document.getElementById("adm-payout-account-name")?.value.trim() || "";
+    const notes = document.getElementById("adm-offline-rdr-note").value.trim();
 
     if (!riderId || !amount || amount <= 0) {
       API.showToast("Please select a rider and valid amount", "error");
       return;
     }
 
+    const btn = document.getElementById("adm-offline-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Disbursing Funds… ⏳"; }
+
     try {
-      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, { amount, bank_account });
+      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, {
+        amount,
+        payout_channel,
+        bank_name,
+        account_number,
+        account_name,
+        notes
+      });
       document.querySelector(".rp-modal-overlay")?.remove();
       API.showToast(res.message || "Payout disbursed successfully!", "success");
       this.render();
       if (window.MobileApp) window.MobileApp.render();
     } catch (err) {
       API.showToast(err.message || "Payout disbursement failed", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "💸 Disburse Payout Now"; }
     }
   },
 
