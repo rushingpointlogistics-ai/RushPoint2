@@ -195,10 +195,15 @@ def serve_invite_signup():
     return {"message": "Invite Signup Screen"}
 
 @app.get("/download/android-apk")
+@app.get("/download/rushpoint.apk")
 def download_android_apk():
-    apk_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mobile-release", "android", "rushingpoint-app-v1.0-release.apk")
+    # Prefer newly built signed release APK from static downloads
+    static_apk = os.path.join(static_dir, "downloads", "rushpoint-app-v1.0-release.apk")
+    if os.path.exists(static_apk):
+        return FileResponse(static_apk, media_type="application/vnd.android.package-archive", filename="rushpoint-v1.0-release.apk")
+    apk_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mobile-release", "android", "rushpoint-app-v1.0-release.apk")
     if os.path.exists(apk_path):
-        return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="rushingpoint-v1.0.apk")
+        return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="rushpoint-v1.0-release.apk")
     return {"error": "APK file not found"}
 
 @app.get("/download/mobile-package")

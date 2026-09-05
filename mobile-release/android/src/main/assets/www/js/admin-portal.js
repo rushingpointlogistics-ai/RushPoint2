@@ -10,6 +10,7 @@ const AdminPortal = {
 
   async init() {
     this.render();
+    this.startAdminOrderPolling();
   },
 
   async render() {
@@ -47,12 +48,14 @@ const AdminPortal = {
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(127,29,29,0.06), transparent); border-left: 3px solid #B91C1C; padding-left: 8px;">🛵 Dispatcher</div>
           <div class="admin-nav-item ${this.currentTab === 'dispatcher' ? 'active' : ''}" onclick="AdminPortal.switchTab('dispatcher')">
             <span class="admin-nav-icon">⚡</span> <span>Live Order Queue</span>
+            <span class="badge" style="background:#EF4444;color:#FFF;padding:1px 7px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">${(this.orders && this.orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length) || '3'}</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'dispatch' ? 'active' : ''}" onclick="AdminPortal.switchTab('dispatch')">
             <span class="admin-nav-icon">📡</span> <span>Fleet Radar & GPS Map</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'waybills' ? 'active' : ''}" onclick="AdminPortal.switchTab('waybills')">
             <span class="admin-nav-icon">📦</span> <span>Waybill & Custom Dispatch</span>
+            <span class="badge" style="background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);padding:1px 6px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Active</span>
           </div>
 
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(37,99,235,0.06), transparent); border-left: 3px solid #2563EB; padding-left: 8px;">⚙️ Operations Manager</div>
@@ -80,6 +83,7 @@ const AdminPortal = {
           </div>
           <div class="admin-nav-item ${this.currentTab === 'vendor-requests' ? 'active' : ''}" onclick="AdminPortal.switchTab('vendor-requests')">
             <span class="admin-nav-icon">📋</span> <span>Partner Applications</span>
+            <span class="badge" style="background:rgba(124,58,237,0.15);color:#A78BFA;border:1px solid rgba(124,58,237,0.3);padding:1px 6px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Review</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'categories' ? 'active' : ''}" onclick="AdminPortal.switchTab('categories')">
             <span class="admin-nav-icon">🏷️</span> <span>Categories Master</span>
@@ -91,6 +95,7 @@ const AdminPortal = {
           <div class="admin-nav-group-title" style="background: linear-gradient(90deg, rgba(217,119,6,0.06), transparent); border-left: 3px solid #D97706; padding-left: 8px;">💬 Customer Support</div>
           <div class="admin-nav-item ${this.currentTab === 'customer-support' ? 'active' : ''}" onclick="AdminPortal.switchTab('customer-support')">
             <span class="admin-nav-icon">🎫</span> <span>Support Ticket Desk</span>
+            <span class="badge" style="background:#F59E0B;color:#000;padding:1px 7px;border-radius:10px;font-size:0.65rem;font-weight:700;margin-left:auto;">Live</span>
           </div>
           <div class="admin-nav-item ${this.currentTab === 'support' ? 'active' : ''}" onclick="AdminPortal.switchTab('support')">
             <span class="admin-nav-icon">💬</span> <span>Old Help Desk</span>
@@ -133,6 +138,9 @@ const AdminPortal = {
             </div>
 
             <div style="display: flex; align-items: center; gap: 14px;">
+              <button onclick="AdminPortal.showBroadcastModal()" style="display: inline-flex; align-items: center; gap: 6px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; border-radius: 10px; padding: 7px 12px; font-size: 0.78rem; font-weight: 800; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#E0E7FF'" onmouseout="this.style.background='#EEF2FF'">
+                📢 Broadcast
+              </button>
               <div style="text-align: right;">
                 <div style="font-size: 0.85rem; font-weight: 800; color: #1E293B;">${user.full_name || 'Super Administrator'}</div>
                 <div style="font-size: 0.72rem; color: #64748B;">${user.email || 'admin@rushingpoint.com'} • <strong style="color: #B91C1C;">${roleBadge}</strong></div>
@@ -153,6 +161,8 @@ const AdminPortal = {
       this.mountDashboardCharts();
     } else if (this.currentTab === "dispatch") {
       this.mountDispatchMap();
+    } else if (this.currentTab === "finance") {
+      setTimeout(() => this.loadLateDeliverySettings(), 100);
     }
   },
 
@@ -678,55 +688,211 @@ const AdminPortal = {
     } catch (e) {}
   },
 
-  showAdminWithdrawRiderModal(riderId, riderName, currentBalance) {
+  async showAdminWithdrawRiderModal(riderId, riderName, currentBalance) {
+    let banks = [];
+    try {
+      const bRes = await API.get("/api/finance/banks");
+      banks = bRes?.banks || [];
+    } catch (e) {}
+    if (!banks || banks.length === 0) {
+      banks = [
+        { code: "999992", name: "OPay (PayCom)", icon: "🔴" },
+        { code: "999991", name: "PalmPay", icon: "🌴" },
+        { code: "50515", name: "Moniepoint MFB", icon: "🔵" },
+        { code: "50211", name: "Kuda Bank", icon: "🟣" },
+        { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧" },
+        { code: "057", name: "Zenith Bank", icon: "🔴" },
+        { code: "044", name: "Access Bank", icon: "🔶" },
+        { code: "011", name: "First Bank of Nigeria", icon: "🐘" },
+        { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴" }
+      ];
+    }
+
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 400px; border-radius: 18px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-dark);">💸 Admin: Disburse Rider Commission</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 480px; border-radius: 20px; overflow: hidden; padding: 0;">
+        <div style="background: linear-gradient(135deg, #065F46 0%, #059669 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.4rem;">💸</span>
+            <div>
+              <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">Admin: Disburse Rider Earnings</h3>
+              <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay Transfer & Emergency Disbursement for ${riderName}</div>
+            </div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="background: #FFF5F5; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.75rem;">
-          <div>Rider: <strong>${riderName}</strong></div>
-          <div style="margin-top: 2px;">Earned Balance: <strong style="color: #B91C1C; font-size: 0.95rem;">₦${(currentBalance || 0).toLocaleString()}</strong></div>
-          <div style="font-size: 0.68rem; color: #64748B; margin-top: 4px;">Disburse funds to rider via direct bank transfer or cash due to feature-phone infrastructure.</div>
-        </div>
+        <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto;">
+          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.78rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #166534; font-weight: 800;">Rider: <strong>${riderName}</strong></span>
+              <span style="color: #15803D; font-size: 1.15rem; font-weight: 900;">₦${(currentBalance || 0).toLocaleString()}</span>
+            </div>
+            <div style="font-size: 0.68rem; color: #64748B; margin-top: 4px;">
+              Disburse commission to rider's bank account or cash handover (for phone lost, stolen, damaged, or feature phones).
+            </div>
+          </div>
 
-        <form onsubmit="AdminPortal.executeAdminWithdrawRider(event, '${riderId}', ${currentBalance})">
-          <div class="rp-form-group">
-            <label class="rp-label">Disbursement Amount (NGN)</label>
-            <input type="number" id="adm-rdr-payout-amt" class="rp-input" value="${currentBalance}" max="${currentBalance}" min="100" required>
-          </div>
-          <div class="rp-form-group">
-            <label class="rp-label">Disbursement Channel / Notes</label>
-            <input type="text" id="adm-rdr-payout-channel" class="rp-input" value="Direct Bank Transfer / Cash Handover" required>
-          </div>
-          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px; background: #059669; font-weight: 800;">
-            Confirm Payout Disbursement 💸
-          </button>
-        </form>
+          <form onsubmit="AdminPortal.executeAdminWithdrawRider(event, '${riderId}', ${currentBalance})">
+            <input type="hidden" id="adm-rdr-account-name" value="">
+
+            <!-- Disbursement Method -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Method</label>
+              <div style="display: flex; gap: 8px;">
+                <label style="flex: 1; border: 1.5px solid #059669; background: #ECFDF5; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                  <input type="radio" name="adm-ind-payout-chan" value="BANK_TRANSFER" checked onchange="AdminPortal.toggleIndPayoutChannel('BANK_TRANSFER')">
+                  🏦 Bank / OPay Transfer
+                </label>
+                <label style="flex: 1; border: 1.5px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                  <input type="radio" name="adm-ind-payout-chan" value="CASH" onchange="AdminPortal.toggleIndPayoutChannel('CASH')">
+                  💵 Cash Handover
+                </label>
+              </div>
+            </div>
+
+            <!-- Bank Transfer Fields -->
+            <div id="adm-ind-bank-fields">
+              <div class="rp-form-group" style="margin-bottom: 10px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">Destination Bank</label>
+                <select id="adm-ind-bank-code" class="rp-select" onchange="AdminPortal.onAdminIndPayoutAccountTyped()" style="border-radius: 10px; font-weight: 700;">
+                  <option value="">-- Select Bank (OPay, PalmPay, Moniepoint, GTB...) --</option>
+                  ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="rp-form-group" style="margin-bottom: 10px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">10-Digit NUBAN Account Number</label>
+                <input type="text" id="adm-ind-acc-num" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="AdminPortal.onAdminIndPayoutAccountTyped()" style="border-radius: 10px; font-size: 1.1rem; font-weight: 800; letter-spacing: 1px;">
+              </div>
+
+              <div id="adm-ind-verified-badge" style="display: none; border-radius: 10px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 12px; font-size: 0.76rem;"></div>
+            </div>
+
+            <!-- Amount -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Amount (NGN)</label>
+              <input type="number" id="adm-rdr-payout-amt" class="rp-input" value="${currentBalance}" max="${currentBalance}" min="100" required style="border-radius: 10px; font-size: 1.1rem; font-weight: 800;">
+            </div>
+
+            <!-- Memo -->
+            <div class="rp-form-group" style="margin-bottom: 14px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Memo / Receipt Note</label>
+              <input type="text" id="adm-rdr-payout-note" class="rp-input" value="Disbursed by Admin to ${riderName}" required style="border-radius: 10px;">
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 16px;">
+              <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center; border-radius: 12px;">
+                Cancel
+              </button>
+              <button type="submit" id="adm-ind-submit-btn" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; border-color: #047857; font-weight: 800; border-radius: 12px; padding: 12px;">
+                💸 Disburse Payout Now
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);
   },
 
+  toggleIndPayoutChannel(chan) {
+    const fields = document.getElementById("adm-ind-bank-fields");
+    const note = document.getElementById("adm-rdr-payout-note");
+    if (fields) fields.style.display = (chan === "CASH") ? "none" : "block";
+    if (note) note.value = (chan === "CASH") ? "Cash Handover at Hub Counter" : "Direct Bank Transfer Payout";
+  },
+
+  async onAdminIndPayoutAccountTyped() {
+    const accInput = document.getElementById("adm-ind-acc-num");
+    const bankSelect = document.getElementById("adm-ind-bank-code");
+    const badge = document.getElementById("adm-ind-verified-badge");
+    const nameInput = document.getElementById("adm-rdr-account-name");
+    const submitBtn = document.getElementById("adm-ind-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Instant Transfer Ready</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.textContent = `💸 Disburse to ${res.account_name.split(' ')[0]}`;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Could not verify account. Please check the 10 digits.`;
+    }
+  },
+
   async executeAdminWithdrawRider(e, riderId, maxBalance) {
     e.preventDefault();
     const amount = parseFloat(document.getElementById("adm-rdr-payout-amt").value);
-    const bank_account = document.getElementById("adm-rdr-payout-channel").value.trim();
+    const channelRadio = document.querySelector('input[name="adm-ind-payout-chan"]:checked');
+    const payout_channel = channelRadio ? channelRadio.value : "BANK_TRANSFER";
+    const bankSelect = document.getElementById("adm-ind-bank-code");
+    const bank_code = bankSelect ? bankSelect.value : "";
+    const bank_name = bankSelect ? bankSelect.options[bankSelect.selectedIndex]?.text : "";
+    const account_number = document.getElementById("adm-ind-acc-num")?.value.trim() || "";
+    const account_name = document.getElementById("adm-rdr-account-name")?.value.trim() || "";
+    const notes = document.getElementById("adm-rdr-payout-note")?.value.trim() || "";
+
     if (!amount || amount <= 0 || amount > maxBalance) {
       API.showToast("Invalid disbursement amount", "error");
       return;
     }
+
+    const btn = document.getElementById("adm-ind-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Disbursing Funds… ⏳"; }
+
     try {
-      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, { amount, bank_account });
+      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, {
+        amount,
+        payout_channel,
+        bank_code,
+        bank_name,
+        account_number,
+        account_name,
+        notes
+      });
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(res.message, "success");
+      API.showToast(res.message || "Payout disbursed successfully!", "success");
       this.render();
       if (window.MobileApp) window.MobileApp.render();
-    } catch (err) {}
+    } catch (err) {
+      API.showToast(err.message || "Payout disbursement failed", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "💸 Disburse Payout Now"; }
+    }
   },
 
   showStoreDeliveryFeeModal(storeId, storeName, currentFee) {
@@ -2055,6 +2221,8 @@ const AdminPortal = {
     let settlements = [];
     let zones = [];
     let expenses = [];
+    let dailySnap = null;
+    let fuelData = null;
 
     try {
       const fRes = await API.get("/api/finance/overview", { silent: true });
@@ -2066,6 +2234,10 @@ const AdminPortal = {
       if (zRes && zRes.zones) zones = zRes.zones;
       const eRes = await API.get("/api/finance/expenses", { silent: true });
       if (eRes && eRes.expenses) expenses = eRes.expenses;
+      const sRes = await API.get("/api/finance/daily-reconciliation-snapshot", { silent: true });
+      if (sRes && sRes.summary) dailySnap = sRes;
+      const fuelRes = await API.get("/api/finance/internal-fleet-fuel-allowance", { silent: true });
+      if (fuelRes && fuelRes.success) fuelData = fuelRes;
     } catch (e) {}
 
     const totalAdminDeliveryEarnings = (summary.admin_delivery_commission_earned || 0) + (summary.admin_internal_fleet_revenue || 0);
@@ -2078,12 +2250,176 @@ const AdminPortal = {
             <div class="admin-page-desc">Customer Payment → Vendor Net (100% Product Price) + Rider Split (Internal Fleet vs External Commission) + Admin Retained Delivery Earnings</div>
           </div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button onclick="AdminPortal.showOfflineRiderPayoutSelectorModal()" class="btn-primary btn-sm" style="background: #D97706; font-weight: 800;" title="Disburse cash or direct bank transfer for riders who don't have smartphones">
+              🛵 Disburse Offline Rider Payout
+            </button>
             <button onclick="AdminPortal.showManualPayoutModal()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800;">
               💸 + New Manual Payout
             </button>
             <button onclick="AdminPortal.showAddZoneModal()" class="btn-secondary btn-sm">+ Delivery Zone</button>
             <button onclick="AdminPortal.showAddExpenseModal()" class="btn-secondary btn-sm">+ Record Expense</button>
           </div>
+        </div>
+
+        <!-- Today's Real-Time Daily P&L Reconciliation Snapshot -->
+        ${dailySnap && dailySnap.summary ? `
+          <div class="rp-card" style="margin-bottom: 20px; padding: 16px; border: 1.5px solid #BBF7D0; background: #F0FDF4; border-radius: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div style="font-size: 0.95rem; font-weight: 900; color: #166534; display: flex; align-items: center; gap: 6px;">
+                  <span>📊 Daily P&L Reconciliation Snapshot (${dailySnap.date})</span>
+                  <span class="badge" style="background: #059669; color: #FFF; font-size: 0.6rem;">LIVE AUDIT</span>
+                </div>
+                <div style="font-size: 0.72rem; color: #15803D;">Automated audit breakdown: gross volume, merchant settlements, courier splits & RushPoint net profit.</div>
+              </div>
+              <button onclick="window.print()" class="btn-secondary btn-sm" style="font-size: 0.72rem; font-weight: 800; border-radius: 8px;">
+                🖨️ Print Daily Audit
+              </button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Gross GMV Today</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #1E293B;">₦${dailySnap.summary.gross_merchandise_value_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #15803D; font-weight: 700;">${dailySnap.summary.total_orders} Orders (${dailySnap.summary.completed_orders} delivered)</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Merchant Fulfillments</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #7F1D1D;">₦${dailySnap.summary.vendor_payouts_due_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">100% item price retained</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">Rider Commissions</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #2563EB;">₦${dailySnap.summary.rider_commissions_earned_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">Cleared to rider wallets</div>
+              </div>
+              <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">RushPoint Net Profit</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #059669;">₦${dailySnap.summary.rushpoint_net_platform_profit_ngn.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 800;">Pure Platform Take-Rate</div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- 🎁 Late Delivery Auto-Compensation Settings Card -->
+        <div class="rp-card" id="lateCompCard" style="margin-bottom: 20px; padding: 18px; border: 1.5px solid #FDE68A; background: #FFFBEB; border-radius: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 900; color: #92400E; display: flex; align-items: center; gap: 6px;">
+                🎁 Late Delivery Auto-Compensation
+                <span class="badge" id="lateCompBadge" style="background: #D97706; color: #FFF; font-size: 0.6rem;">LOADING...</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #78350F; margin-top: 2px;">
+                When delivery exceeds the promised time, the system <strong>automatically credits</strong> the customer's wallet — no manual action needed.
+              </div>
+            </div>
+          </div>
+          <div id="lateCompForm" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; flex-wrap: wrap;">
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">⏱️ Time Threshold (minutes)</label>
+              <input id="lateCompThreshold" type="number" min="5" max="240" value="45"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;"
+                placeholder="e.g. 45" />
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">Minutes after assignment before credit triggers</div>
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">💰 Auto-Credit Amount (₦)</label>
+              <input id="lateCompAmount" type="number" min="0" step="50" value="500"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;"
+                placeholder="e.g. 500" />
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">NGN added to customer wallet (one-time per order)</div>
+            </div>
+            <div>
+              <label style="font-size: 0.72rem; font-weight: 800; color: #78350F; display: block; margin-bottom: 4px;">🔛 Status</label>
+              <select id="lateCompEnabled"
+                style="width: 100%; padding: 10px 12px; border: 1.5px solid #FCD34D; border-radius: 10px; font-size: 0.9rem; font-weight: 700; background: #FFF; outline: none;">
+                <option value="true">✅ Enabled — Auto-Credit Active</option>
+                <option value="false">⏸️ Disabled — Paused</option>
+              </select>
+              <div style="font-size: 0.62rem; color: #92400E; margin-top: 3px;">Toggle auto-compensation on/off</div>
+            </div>
+            <div>
+              <button onclick="AdminPortal.saveLateDeliverySettings()" class="btn-primary btn-sm"
+                style="background: #D97706; border-color: #B45309; font-weight: 900; white-space: nowrap; padding: 10px 18px; border-radius: 10px; font-size: 0.85rem;">
+                💾 Save Settings
+              </button>
+            </div>
+          </div>
+          <div id="lateCompInfo" style="margin-top: 12px; font-size: 0.72rem; color: #065F46; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 8px 12px; display: none;"></div>
+        </div>
+
+        <!-- ⛽ Internal Fleet Fuel & Mileage Reimbursement Sheet -->
+        <div class="rp-card" style="margin-bottom: 20px; padding: 18px; border: 1.5px solid #93C5FD; background: #F0F9FF; border-radius: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 900; color: #1E40AF; display: flex; align-items: center; gap: 6px;">
+                ⛽ Internal Fleet Fuel & Mileage Reimbursement Sheet
+                <span class="badge" style="background: #2563EB; color: #FFF; font-size: 0.6rem;">LIVE MILEAGE</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #1E3A8A; margin-top: 2px;">
+                Auto-calculated fuel stipend (<strong>₦${fuelData ? fuelData.rate_per_km_ngn : 80}/KM</strong>) for company salaried riders based on today's completed deliveries.
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="text-align: right;">
+                <div style="font-size: 0.68rem; color: #1E40AF; font-weight: 700;">Total Fuel Due Today</div>
+                <div style="font-size: 1.15rem; font-weight: 900; color: #1D4ED8;">₦${(fuelData ? fuelData.total_fuel_allowance_due_ngn : 0).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          ${fuelData && fuelData.riders && fuelData.riders.length > 0 ? `
+            <div class="rp-table-container" style="background: #FFF; border-radius: 10px; border: 1px solid #BFDBFE;">
+              <table class="rp-table">
+                <thead>
+                  <tr style="background: #EFF6FF;">
+                    <th>Rider / Ref</th>
+                    <th>Vehicle / Plate</th>
+                    <th>Today's Deliveries</th>
+                    <th>Estimated KM</th>
+                    <th>Fuel Allowance</th>
+                    <th>Current Wallet</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${fuelData.riders.map(r => `
+                    <tr>
+                      <td>
+                        <strong>${r.full_name}</strong>
+                        <div style="font-size: 0.68rem; color: #64748B;"><code>${r.rider_ref}</code></div>
+                      </td>
+                      <td style="font-size: 0.78rem;">
+                        <div>${r.vehicle_type || 'BIKE'}</div>
+                        <div style="font-size: 0.68rem; color: #64748B;">${r.plate_number || 'No Plate'}</div>
+                      </td>
+                      <td>
+                        <span class="badge ${r.today_deliveries_count > 0 ? 'badge-confirmed' : 'badge-pending'}">
+                          ${r.today_deliveries_count} orders
+                        </span>
+                      </td>
+                      <td><strong>${r.today_km_driven} km</strong></td>
+                      <td><strong style="color: #2563EB;">₦${r.today_fuel_allowance_ngn.toLocaleString()}</strong></td>
+                      <td style="font-size: 0.78rem;">₦${r.wallet_balance.toLocaleString()}</td>
+                      <td style="text-align: right;">
+                        <button onclick="AdminPortal.disburseRiderFuelPayout('${r.rider_id}', ${r.today_fuel_allowance_ngn}, '${r.full_name.replace(/'/g, "\\'")}')"
+                          class="btn-primary btn-sm"
+                          style="background: #2563EB; border-color: #1D4ED8; font-size: 0.72rem; padding: 4px 10px; border-radius: 8px;"
+                          ${r.today_fuel_allowance_ngn <= 0 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+                          ⛽ Disburse Fuel
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `
+            <div style="background: #FFF; border-radius: 10px; padding: 16px; text-align: center; color: #64748B; font-size: 0.8rem; border: 1px dashed #BFDBFE;">
+              No internal company riders registered yet. Internal fleet members are configured under Fleet Management.
+            </div>
+          `}
         </div>
 
         <!-- Admin Master Operations & Delivery Commission Wallet Card -->
@@ -3016,13 +3352,17 @@ const AdminPortal = {
   async renderDispatcherModule() {
     let orders = [];
     let riders = [];
+    let callSetting = { allow_customer_call_rider: false };
     try {
       const oRes = await API.get("/api/orders/", { silent: true });
       if (oRes && oRes.orders) orders = oRes.orders;
       const rRes = await API.get("/api/riders/live-map", { silent: true });
       if (rRes && rRes.riders) riders = rRes.riders;
+      const cRes = await API.get("/api/dispatch/customer-call-setting", { silent: true });
+      if (cRes) callSetting = cRes;
     } catch (e) {}
 
+    const isCallAllowed = Boolean(callSetting.allow_customer_call_rider);
     const pendingOrders = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status));
     const activeOrders = orders.filter(o => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'].includes(o.status));
     const deliveredToday = orders.filter(o => o.status === 'DELIVERED');
@@ -3033,12 +3373,38 @@ const AdminPortal = {
         <div class="admin-page-header">
           <div>
             <h1 class="admin-page-title">🛵 Dispatcher — Live Order Queue & Assignment</h1>
-            <div class="admin-page-desc">Receive, assign, reassign and track all orders in real-time. Contact riders via WhatsApp instantly.</div>
+            <div class="admin-page-desc">Receive, assign, reassign and track all orders in real-time. Automatic nearest-rider matching enabled.</div>
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            ${pendingOrders.length > 0 ? `
+              <button onclick="AdminPortal.autoAssignAllPending()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800; display: flex; align-items: center; gap: 4px;" title="Automatically pair every pending order with the nearest available courier">
+                ⚡ Auto-Assign All (${pendingOrders.length})
+              </button>
+            ` : ''}
             <button onclick="AdminPortal.render()" class="btn-secondary btn-sm">🔄 Refresh</button>
             <button onclick="AdminPortal.switchTab('dispatch')" class="btn-primary btn-sm">📡 Open Fleet Map</button>
           </div>
+        </div>
+
+        <!-- Dispatch Privacy & Customer Communication Policy Control Bar -->
+        <div class="rp-card" style="margin-bottom: 16px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: ${isCallAllowed ? '#FFFBEB' : '#F0FDF4'}; border: 1.5px solid ${isCallAllowed ? '#FCD34D' : '#BBF7D0'};">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.3rem;">${isCallAllowed ? '⚠️' : '🛡️'}</span>
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 6px;">
+                <span>Customer Direct Courier Call:</span>
+                <span class="badge" style="background: ${isCallAllowed ? '#D97706' : '#059669'}; color: #FFF; font-size: 0.62rem; padding: 2px 6px;">
+                  ${isCallAllowed ? '🟢 ENABLED (High Workload Overload Mode)' : '🔒 RESTRICTED (Default — Dispatch Support Handles Calls)'}
+                </span>
+              </div>
+              <div style="font-size: 0.68rem; color: #64748B; margin-top: 2px;">
+                ${isCallAllowed ? 'Customers can call couriers directly. Turn OFF once order rush subsides.' : 'Customers contact RushPoint Dispatch Support only. Couriers can drive safely without phone interruptions.'}
+              </div>
+            </div>
+          </div>
+          <button onclick="AdminPortal.toggleCustomerCallPolicy(${!isCallAllowed})" class="btn-secondary btn-sm" style="font-size: 0.72rem; font-weight: 800; white-space: nowrap; border-color: ${isCallAllowed ? '#B45309' : '#059669'}; color: ${isCallAllowed ? '#B45309' : '#059669'};">
+            ${isCallAllowed ? '🔒 Restore Privacy (Default)' : '⚡ Enable Direct Calling'}
+          </button>
         </div>
 
         <!-- Status KPI Bar -->
@@ -3107,8 +3473,10 @@ const AdminPortal = {
                       <td style="font-size:0.75rem;">${o.delivery_address}</td>
                       <td><code style="background:var(--blood-tint);color:var(--blood-primary);padding:2px 6px;border-radius:4px;font-weight:900;">${o.pod_otp || 'N/A'}</code></td>
                       <td style="display:flex;gap:4px;flex-wrap:wrap;">
-                        <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm">⚡ Assign</button>
-                        <button onclick="AdminPortal.showRefundModal('${o.id}', '${o.order_ref}', ${o.total_amount})" class="btn-danger btn-sm">💸 Refund</button>
+                        <button onclick="AdminPortal.autoAssignNearestOrder('${o.id}')" class="btn-primary btn-sm" style="background:#059669; font-size:0.68rem; padding:4px 8px;" title="Auto-match nearest courier by vendor GPS">⚡ Auto</button>
+                        <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm" style="font-size:0.68rem; padding:4px 8px;">Assign</button>
+                        <button onclick="AdminPortal.showSimDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF; font-size:0.68rem; padding:4px 8px;">📱 SIM</button>
+                        <button onclick="AdminPortal.showRefundModal('${o.id}', '${o.order_ref}', ${o.total_amount})" class="btn-danger btn-sm" style="font-size:0.68rem; padding:4px 8px;">💸 Refund</button>
                       </td>
                     </tr>
                   `).join('')}
@@ -3119,8 +3487,13 @@ const AdminPortal = {
 
         <!-- Active Orders in Transit -->
         <div class="rp-card">
-          <div class="rp-card-header">
+          <div class="rp-card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div class="rp-card-title" style="color:#2563EB;">🛵 Orders In Transit & Active Missions (${activeOrders.length})</div>
+            ${activeOrders.length > 0 ? `
+              <button onclick="AdminPortal.bulkConfirmActiveDeliveries()" class="btn-primary btn-sm" style="background: #059669; font-weight: 800; font-size: 0.72rem; padding: 5px 12px; border-radius: 8px;" title="Approve and verify all active deliveries at once — releases funds to couriers">
+                ⚡ Bulk Verify Deliveries (${activeOrders.length})
+              </button>
+            ` : ''}
           </div>
           <div class="rp-table-container">
             <table class="rp-table">
@@ -3148,6 +3521,7 @@ const AdminPortal = {
                       <td style="display:flex;gap:4px;flex-wrap:wrap;">
                         <button onclick="AdminPortal.viewOrderTimeline('${o.id}')" class="btn-secondary btn-sm">📋 Timeline</button>
                         <button onclick="AdminPortal.showDispatchModal('${o.id}', '${o.order_ref}')" class="btn-secondary btn-sm">🔄 Reassign</button>
+                        ${o.rider_phone ? `<button onclick="AdminPortal.showSimDispatchModal('${o.id}','${o.order_ref}')" class="btn-secondary btn-sm" style="background:#8B5CF6;color:#FFF;border-color:#8B5CF6;">📟 SIM</button>` : ''}
                         <button onclick="AdminPortal.adminConfirmDelivery('${o.id}', '${o.order_ref}')" class="btn-primary btn-sm" style="background:#059669;font-size:0.65rem;padding:4px 8px;" title="Confirm delivery on behalf of rider phone call — releases commission">
                           📞 Confirm Delivery
                         </button>
@@ -4237,6 +4611,681 @@ const AdminPortal = {
     } catch (err) {}
   },
 
+  async showSimDispatchModal(orderId, orderRef) {
+    try {
+      const res = await API.get(`/api/orders/${orderId}`, { silent: true });
+      const o = res?.order || {};
+      const riderPhone = o.rider_phone || '';
+      const riderName = o.rider_name || o.rider_ref || 'Rider';
+      const storeAddress = o.store_address || o.store_name || 'Vendor Store';
+      const dropoffAddress = o.delivery_address || '';
+      const customerPhone = o.customer_phone || '';
+      this.showSimDispatchPanel(riderPhone, riderName, o.rider_id || '', orderRef, orderId, storeAddress, dropoffAddress, customerPhone);
+    } catch (e) {
+      API.showToast('Could not load order details for SIM dispatch.', 'error');
+    }
+  },
+
+  // ==========================================
+  // 🚨 ADMIN REAL-TIME AUDIO CHIME & BANNER ALERT SYSTEM (100% FREE)
+  // Plays a dispatcher chime using Web Audio API + shows a red banner
+  // whenever a new order arrives in the Live Order Queue.
+  // ==========================================
+  _adminAudioCtx: null,
+  _adminLastOrderCount: null,
+  _adminPollInterval: null,
+
+  playAdminOrderChime() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      // Descending 3-note dispatcher chime (G5→E5→C5)
+      const notes = [784, 659, 523];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.22);
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.22);
+        gain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + i * 0.22 + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.22);
+        osc.stop(ctx.currentTime + i * 0.22 + 0.4);
+      });
+      // Auto-close ctx after last note
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1200);
+    } catch (e) {}
+  },
+
+  showAdminNewOrderBanner(orderCount) {
+    // Remove any existing banner first
+    const existing = document.getElementById('admin-new-order-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'admin-new-order-banner';
+    banner.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 99998;
+      background: linear-gradient(90deg, #7F1D1D, #B91C1C, #EF4444);
+      color: #FFF; padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: inherit; box-shadow: 0 4px 20px rgba(185,28,28,0.5);
+      animation: rp-slide-down 0.35s ease;
+    `;
+    banner.innerHTML = `
+      <style>
+        @keyframes rp-slide-down { from { transform: translateY(-100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+        @keyframes rp-blink { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+        .rp-admin-blink { animation: rp-blink 0.8s ease-in-out infinite; }
+      </style>
+      <div style="display:flex; align-items:center; gap: 10px;">
+        <span class="rp-admin-blink" style="font-size: 1.4rem;">🚨</span>
+        <div>
+          <div style="font-weight: 900; font-size: 0.92rem;">
+            ${orderCount} NEW ORDER${orderCount > 1 ? 'S' : ''} WAITING FOR DISPATCH!
+          </div>
+          <div style="font-size: 0.7rem; opacity: 0.88;">
+            Go to Live Order Queue → Assign a rider immediately
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="AdminPortal.switchTab('dispatcher')" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:#FFF; padding: 5px 12px; border-radius:8px; font-weight:800; font-size:0.78rem; cursor:pointer;">
+          ⚡ Open Queue
+        </button>
+        <button onclick="this.closest('#admin-new-order-banner').remove()" style="background:none; border:none; color:#FFF; font-size:1.2rem; cursor:pointer; opacity:0.7;">✕</button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+    // Auto-dismiss after 30 seconds
+    setTimeout(() => { try { banner.remove(); } catch (e) {} }, 30000);
+  },
+
+  startAdminOrderPolling() {
+    if (this._adminPollInterval) return;
+    this._adminPollInterval = setInterval(async () => {
+      try {
+        const user = (typeof API !== 'undefined' && API.getUser()) || null;
+        if (!user || !['ADMIN', 'STAFF'].includes(user.account_type)) {
+          this.stopAdminOrderPolling();
+          return;
+        }
+        const res = await API.get('/api/orders/', { silent: true });
+        const orders = res?.orders || [];
+        const pendingCount = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status)).length;
+
+        if (this._adminLastOrderCount === null) {
+          // First poll — just set baseline silently
+          this._adminLastOrderCount = pendingCount;
+          return;
+        }
+
+        if (pendingCount > this._adminLastOrderCount) {
+          // New order(s) arrived!
+          const diff = pendingCount - this._adminLastOrderCount;
+          this.playAdminOrderChime();
+          this.showAdminNewOrderBanner(pendingCount);
+          this._adminLastOrderCount = pendingCount;
+        } else {
+          this._adminLastOrderCount = pendingCount;
+        }
+
+        // Auto-check for stale assignments (>3 mins without rider movement) and auto-escalate
+        try {
+          const escRes = await API.post('/api/dispatch/check-stale-assignments', {}, { silent: true });
+          if (escRes && escRes.escalated_count > 0) {
+            API.showToast(`🚨 Escalation: ${escRes.escalated_count} unresponsive assignments re-routed to next closest couriers!`, 'warning');
+            if (this.currentTab === 'dispatcher') this.render();
+          }
+        } catch (escErr) {}
+
+        // Auto-credit customers for late deliveries based on admin-configured threshold
+        try {
+          const lateRes = await API.post('/api/dispatch/check-late-deliveries', {}, { silent: true });
+          if (lateRes && lateRes.compensated_count > 0) {
+            API.showToast(`🎁 ${lateRes.compensated_count} customer(s) auto-credited ₦ for late delivery!`, 'info');
+          }
+        } catch (lateErr) {}
+      } catch (e) {}
+    }, 12000); // poll every 12 seconds
+  },
+
+  stopAdminOrderPolling() {
+    if (this._adminPollInterval) {
+      clearInterval(this._adminPollInterval);
+      this._adminPollInterval = null;
+    }
+  },
+
+  // ==========================================
+  // 📟 1-TAP SIM CARD DISPATCH — SMS + CALL for Feature-Phone (Nokia/itel) Riders
+  // Opens native phone app / SMS composer pre-filled with mission details.
+  // ₦0 cost to admin — uses GSM tel: and sms: URI schemes.
+  // ==========================================
+  simSmsDispatch(riderPhone, riderName, orderRef, storeAddress, dropoffAddress, customerPhone, commissionNaira) {
+    if (!riderPhone) {
+      alert('No phone number registered for this rider.');
+      return;
+    }
+    const mission = [
+      `RUSHPOINT DISPATCH`,
+      `Order: ${orderRef}`,
+      `Pickup: ${storeAddress}`,
+      `Dropoff: ${dropoffAddress}`,
+      `Customer: ${customerPhone}`,
+      `Commission: N${commissionNaira}`,
+      `Reply: ACCEPT or DECLINE`,
+    ].join('\n');
+    const encoded = encodeURIComponent(mission);
+    // sms: URI — opens native SMS app with rider's number and pre-filled message
+    window.open(`sms:${riderPhone}?body=${encoded}`, '_self');
+  },
+
+  simCallDispatch(riderPhone, riderName) {
+    if (!riderPhone) {
+      alert('No phone number registered for this rider.');
+      return;
+    }
+    // tel: URI — initiates a native GSM call on the admin's device
+    window.open(`tel:${riderPhone}`, '_self');
+  },
+
+  showSimDispatchPanel(riderPhone, riderName, riderId, orderRef, orderId, storeAddress, dropoffAddress, customerPhone) {
+    const existingPanel = document.getElementById('rp-sim-dispatch-panel');
+    if (existingPanel) existingPanel.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'rp-sim-dispatch-panel';
+    panel.className = 'modal-backdrop rp-modal-overlay';
+    panel.innerHTML = `
+      <div class="modal-dialog" style="max-width:480px; border-radius:18px;">
+        <div class="modal-header">
+          <div>
+            <h3 style="font-size:1rem; font-weight:900; color:#7F1D1D;">📟 SIM Card Dispatch — Feature-Phone Rider</h3>
+            <div style="font-size:0.7rem; color:#64748B;">Rider: <strong>${riderName}</strong> (${riderPhone}) • Order: <strong>${orderRef}</strong></div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;">✕</button>
+        </div>
+
+        <div style="background:#FFF5F5; border:1px solid #FECACA; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:0.74rem; color:#7F1D1D;">
+          <strong>📍 Pickup:</strong> ${storeAddress || 'Vendor Store'}<br>
+          <strong>📦 Dropoff:</strong> ${dropoffAddress || 'Customer Address'}<br>
+          <strong>📞 Customer:</strong> ${customerPhone || 'N/A'}
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+          <!-- 1-Tap SMS -->
+          <button onclick="AdminPortal.simSmsDispatch('${riderPhone}', '${riderName}', '${orderRef}', '${(storeAddress||'').replace(/'/g,'')}', '${(dropoffAddress||'').replace(/'/g,'')}', '${customerPhone||''}', '800'); this.closest('.modal-backdrop').remove();"
+            style="background: linear-gradient(135deg, #1E40AF, #2563EB); color:#FFF; border:none; border-radius:12px; padding:14px; cursor:pointer; text-align:center; font-weight:800; font-size:0.8rem;">
+            📩 Send SMS Mission<br>
+            <span style="font-size:0.65rem; font-weight:500; opacity:0.85;">Opens native SMS — ₦0 from app</span>
+          </button>
+          <!-- 1-Tap Call -->
+          <button onclick="AdminPortal.simCallDispatch('${riderPhone}', '${riderName}');"
+            style="background: linear-gradient(135deg, #065F46, #059669); color:#FFF; border:none; border-radius:12px; padding:14px; cursor:pointer; text-align:center; font-weight:800; font-size:0.8rem;">
+            📞 Call Rider Directly<br>
+            <span style="font-size:0.65rem; font-weight:500; opacity:0.85;">Opens native phone dialer</span>
+          </button>
+        </div>
+
+        <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:10px; font-size:0.7rem; color:#166534; line-height:1.6;">
+          <strong>💡 How it works:</strong><br>
+          • Tap <em>Send SMS Mission</em> — your phone opens the SMS app with the rider's number and full dispatch details pre-filled. Tap Send.<br>
+          • The rider's Nokia / itel button phone receives the SMS instantly with pickup, dropoff, and commission info.<br>
+          • Tap <em>Call Rider Directly</em> to verbally confirm the mission over GSM voice call.
+        </div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+  },
+
+  async autoAssignNearestOrder(orderId) {
+    try {
+      const res = await API.post(`/api/dispatch/auto-assign/${orderId}`);
+      API.showToast(res.message || "Auto-assigned nearest rider successfully!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to auto-assign rider", "error");
+    }
+  },
+
+  async autoAssignAllPending() {
+    if (!confirm("Auto-assign all pending orders to their nearest available couriers?")) return;
+    try {
+      const res = await API.post("/api/dispatch/auto-assign-all");
+      API.showToast(res.message || "All pending orders auto-assigned!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to auto-assign pending orders", "error");
+    }
+  },
+
+  async toggleCustomerCallPolicy(newState) {
+    try {
+      const res = await API.post("/api/dispatch/customer-call-setting", { enabled: newState });
+      API.showToast(res.message, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast("Could not update customer call policy", "error");
+    }
+  },
+
+  async loadLateDeliverySettings() {
+    try {
+      const res = await API.get("/api/dispatch/late-delivery-settings", { silent: true });
+      if (!res) return;
+      const threshold = document.getElementById("lateCompThreshold");
+      const amount = document.getElementById("lateCompAmount");
+      const enabled = document.getElementById("lateCompEnabled");
+      const badge = document.getElementById("lateCompBadge");
+      if (threshold) threshold.value = res.threshold_minutes || 45;
+      if (amount) amount.value = res.credit_amount_ngn || 500;
+      if (enabled) enabled.value = res.enabled ? "true" : "false";
+      if (badge) {
+        badge.textContent = res.enabled ? "ACTIVE" : "PAUSED";
+        badge.style.background = res.enabled ? "#059669" : "#DC2626";
+      }
+    } catch (e) {}
+  },
+
+  async saveLateDeliverySettings() {
+    const threshold = parseInt(document.getElementById("lateCompThreshold")?.value || "45");
+    const amount = parseFloat(document.getElementById("lateCompAmount")?.value || "500");
+    const enabled = (document.getElementById("lateCompEnabled")?.value || "true") === "true";
+    if (isNaN(threshold) || threshold < 5) {
+      API.showToast("Threshold must be at least 5 minutes.", "error"); return;
+    }
+    if (isNaN(amount) || amount < 0) {
+      API.showToast("Credit amount cannot be negative.", "error"); return;
+    }
+    try {
+      const res = await API.post("/api/dispatch/late-delivery-settings", {
+        threshold_minutes: threshold,
+        credit_amount_ngn: amount,
+        enabled
+      });
+      API.showToast(res.message || "Late delivery settings saved!", "success");
+      const info = document.getElementById("lateCompInfo");
+      const badge = document.getElementById("lateCompBadge");
+      if (info) {
+        info.style.display = "block";
+        info.innerHTML = `✅ <strong>Saved:</strong> Customers will receive <strong>₦${amount.toLocaleString()}</strong> wallet credit if their delivery exceeds <strong>${threshold} minutes</strong>. Status: <strong>${enabled ? "Active ✅" : "Paused ⏸️"}</strong>`;
+      }
+      if (badge) {
+        badge.textContent = enabled ? "ACTIVE" : "PAUSED";
+        badge.style.background = enabled ? "#059669" : "#DC2626";
+      }
+    } catch (e) {
+      API.showToast(e.message || "Failed to save late delivery settings.", "error");
+    }
+  },
+
+  showBroadcastModal() {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 480px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: #312E81; display: flex; align-items: center; gap: 8px;">
+            <span>📢</span> Admin Broadcast Notification Center
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.75rem; color: #3730A3;">
+          Push an immediate system notification with sound chime to all users or target specific user groups.
+        </div>
+
+        <form onsubmit="AdminPortal.sendBroadcastNotification(event)">
+          <div class="rp-form-group">
+            <label class="rp-label">Target Audience</label>
+            <select id="bc-target" class="rp-select" style="font-weight: 700;">
+              <option value="ALL">👥 All Platform Users (Everyone)</option>
+              <option value="CUSTOMERS">🛍️ All Customers Only</option>
+              <option value="VENDORS">🏪 All Store Merchants & Vendors Only</option>
+              <option value="RIDERS">🛵 All Delivery Couriers & Riders Only</option>
+            </select>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Notification Title</label>
+            <input type="text" id="bc-title" class="rp-input" placeholder="e.g. Katsina Festive Rush Notice / Fuel Surcharge Update" required>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Broadcast Message</label>
+            <textarea id="bc-message" class="rp-textarea" rows="4" placeholder="Write your broadcast announcement..." required></textarea>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 16px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #4338CA; border-color: #3730A3; font-weight: 800;">
+              🚀 Send Broadcast Alert
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async sendBroadcastNotification(e) {
+    e.preventDefault();
+    const target = document.getElementById("bc-target").value;
+    const title = document.getElementById("bc-title").value.trim();
+    const message = document.getElementById("bc-message").value.trim();
+
+    if (!title || !message) {
+      API.showToast("Title and message are required", "error");
+      return;
+    }
+
+    try {
+      const res = await API.post("/api/notifications/broadcast", { target, title, message });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || `Broadcast sent to ${res.sent_count} users!`, "success");
+    } catch (err) {
+      API.showToast(err.message || "Failed to send broadcast", "error");
+    }
+  },
+
+  async bulkConfirmActiveDeliveries() {
+    if (!confirm("Bulk-verify ALL active and arrived deliveries now? This will mark them DELIVERED, release escrow settlements, and credit courier wallets.")) return;
+    try {
+      const res = await API.post("/api/orders/bulk-confirm-delivery", {});
+      API.showToast(res.message || `Verified ${res.confirmed_count} deliveries!`, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (e) {
+      API.showToast(e.message || "Failed to bulk-verify deliveries", "error");
+    }
+  },
+
+  async showOfflineRiderPayoutSelectorModal() {
+    try {
+      const res = await API.get("/api/riders/");
+      const riders = res?.riders || [];
+      let banks = [];
+      try {
+        const bRes = await API.get("/api/finance/banks");
+        banks = bRes?.banks || [];
+      } catch (e) {}
+      if (!banks || banks.length === 0) {
+        banks = [
+          { code: "999992", name: "OPay (PayCom)", icon: "🔴" },
+          { code: "999991", name: "PalmPay", icon: "🌴" },
+          { code: "50515", name: "Moniepoint MFB", icon: "🔵" },
+          { code: "50211", name: "Kuda Bank", icon: "🟣" },
+          { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧" },
+          { code: "057", name: "Zenith Bank", icon: "🔴" },
+          { code: "044", name: "Access Bank", icon: "🔶" },
+          { code: "011", name: "First Bank of Nigeria", icon: "🐘" },
+          { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴" }
+        ];
+      }
+
+      const modal = document.createElement("div");
+      modal.className = "modal-backdrop rp-modal-overlay";
+      modal.innerHTML = `
+        <div class="modal-dialog" style="max-width: 490px; border-radius: 20px; overflow: hidden; padding: 0;">
+          <div style="background: linear-gradient(135deg, #92400E 0%, #D97706 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.4rem;">🛵</span>
+              <div>
+                <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">Disburse Offline Rider Payout</h3>
+                <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay Transfer & Cash Proxy for Feature Phone Couriers</div>
+              </div>
+            </div>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
+          </div>
+
+          <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto;">
+            <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #78350F;">
+              Withdraw and disburse earnings on behalf of couriers without smartphones (Nokia/itel). Supports instant NUBAN/OPay transfer with automatic account name resolution.
+            </div>
+
+            <form onsubmit="AdminPortal.handleOfflineRiderPayoutSubmit(event)">
+              <input type="hidden" id="adm-payout-account-name" value="">
+
+              <!-- 1. Select Rider -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">1. Select Courier / Rider</label>
+                <select id="adm-offline-rdr-select" class="rp-select" onchange="AdminPortal.onOfflineRiderSelected(this)" required style="border-radius: 10px; font-weight: 700;">
+                  <option value="">-- Choose Rider --</option>
+                  ${riders.map(r => `
+                    <option value="${r.id}" data-name="${r.full_name}" data-balance="${r.wallet_balance || 0}" data-ref="${r.rider_ref}" data-phone="${r.phone || ''}">
+                      ${r.full_name} (${r.rider_ref} - Available: ₦${(r.wallet_balance || 0).toLocaleString()})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <!-- Rider Balance Box -->
+              <div id="adm-offline-rdr-balance-box" style="display: none; background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.78rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color: #166534; font-weight: 800;">Available Earned Balance:</span>
+                  <strong id="adm-offline-rdr-bal" style="color: #15803D; font-size: 1.25rem; font-weight: 900;">₦0</strong>
+                </div>
+              </div>
+
+              <!-- 2. Payout Channel Selector -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">2. Disbursement Method</label>
+                <div style="display: flex; gap: 8px;">
+                  <label style="flex: 1; border: 1.5px solid #D97706; background: #FFFBEB; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                    <input type="radio" name="adm-payout-chan" value="BANK_TRANSFER" checked onchange="AdminPortal.togglePayoutChannel('BANK_TRANSFER')">
+                    🏦 Bank / OPay Transfer
+                  </label>
+                  <label style="flex: 1; border: 1.5px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                    <input type="radio" name="adm-payout-chan" value="CASH" onchange="AdminPortal.togglePayoutChannel('CASH')">
+                    💵 Counter Cash Handover
+                  </label>
+                </div>
+              </div>
+
+              <!-- Bank Transfer Fields -->
+              <div id="adm-bank-transfer-fields">
+                <!-- Select Bank -->
+                <div class="rp-form-group" style="margin-bottom: 10px;">
+                  <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">Destination Bank</label>
+                  <select id="adm-payout-bank" class="rp-select" onchange="AdminPortal.onAdminPayoutAccountTyped()" style="border-radius: 10px; font-weight: 700;">
+                    <option value="">-- Select Bank (OPay, PalmPay, Moniepoint, GTB...) --</option>
+                    ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+                  </select>
+                </div>
+
+                <!-- Account Number -->
+                <div class="rp-form-group" style="margin-bottom: 10px;">
+                  <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">10-Digit NUBAN Account Number</label>
+                  <input type="text" id="adm-payout-acc-num" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="AdminPortal.onAdminPayoutAccountTyped()" style="border-radius: 10px; font-size: 1.1rem; font-weight: 800; letter-spacing: 1px;">
+                </div>
+
+                <!-- Real-time Verified Account Banner -->
+                <div id="adm-payout-verified-badge" style="display: none; border-radius: 10px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 12px; font-size: 0.76rem;"></div>
+              </div>
+
+              <!-- 3. Amount -->
+              <div class="rp-form-group" style="margin-bottom: 12px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Amount (NGN)</label>
+                <input type="number" id="adm-offline-rdr-amount" class="rp-input" min="100" placeholder="e.g. 5000" required style="border-radius: 10px; font-size: 1.1rem; font-weight: 800;">
+              </div>
+
+              <!-- 4. Notes / Memo -->
+              <div class="rp-form-group" style="margin-bottom: 14px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Memo / Receipt Note</label>
+                <input type="text" id="adm-offline-rdr-note" class="rp-input" value="Disbursed at Katsina Hub Dispatch Desk" required style="border-radius: 10px;">
+              </div>
+
+              <div style="display: flex; gap: 10px; margin-top: 16px;">
+                <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center; border-radius: 12px;">
+                  Cancel
+                </button>
+                <button type="submit" id="adm-offline-submit-btn" class="btn-primary" style="flex: 2; justify-content: center; background: #D97706; border-color: #B45309; font-weight: 800; border-radius: 12px; padding: 12px;">
+                  💸 Disburse Payout Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch (e) {
+      API.showToast("Could not load riders list", "error");
+    }
+  },
+
+  togglePayoutChannel(chan) {
+    const fields = document.getElementById("adm-bank-transfer-fields");
+    const note = document.getElementById("adm-offline-rdr-note");
+    if (fields) {
+      fields.style.display = (chan === "CASH") ? "none" : "block";
+    }
+    if (note) {
+      note.value = (chan === "CASH") ? "Cash Handover at Hub Dispatch Counter" : "Bank Transfer Disbursed to Courier Account";
+    }
+  },
+
+  async onAdminPayoutAccountTyped() {
+    const accInput = document.getElementById("adm-payout-acc-num");
+    const bankSelect = document.getElementById("adm-payout-bank");
+    const badge = document.getElementById("adm-payout-verified-badge");
+    const nameInput = document.getElementById("adm-payout-account-name");
+    const submitBtn = document.getElementById("adm-offline-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Instant Transfer Ready</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.textContent = `💸 Disburse to ${res.account_name.split(' ')[0]}`;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Could not verify account. Please check the 10 digits.`;
+    }
+  },
+
+  onOfflineRiderSelected(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const balBox = document.getElementById("adm-offline-rdr-balance-box");
+    const balEl = document.getElementById("adm-offline-rdr-bal");
+    const amtInput = document.getElementById("adm-offline-rdr-amount");
+    if (!opt || !opt.value) {
+      if (balBox) balBox.style.display = "none";
+      return;
+    }
+    const bal = parseFloat(opt.getAttribute("data-balance") || 0);
+    if (balBox) balBox.style.display = "block";
+    if (balEl) balEl.innerText = `₦${bal.toLocaleString()}`;
+    if (amtInput) {
+      amtInput.value = bal;
+      amtInput.max = bal;
+    }
+  },
+
+  async handleOfflineRiderPayoutSubmit(e) {
+    e.preventDefault();
+    const selectEl = document.getElementById("adm-offline-rdr-select");
+    const riderId = selectEl.value;
+    const amount = parseFloat(document.getElementById("adm-offline-rdr-amount").value);
+    const channelRadio = document.querySelector('input[name="adm-payout-chan"]:checked');
+    const payout_channel = channelRadio ? channelRadio.value : "BANK_TRANSFER";
+    const bankSelect = document.getElementById("adm-payout-bank");
+    const bank_name = bankSelect ? bankSelect.options[bankSelect.selectedIndex]?.text : "";
+    const account_number = document.getElementById("adm-payout-acc-num")?.value.trim() || "";
+    const account_name = document.getElementById("adm-payout-account-name")?.value.trim() || "";
+    const notes = document.getElementById("adm-offline-rdr-note").value.trim();
+
+    if (!riderId || !amount || amount <= 0) {
+      API.showToast("Please select a rider and valid amount", "error");
+      return;
+    }
+
+    const btn = document.getElementById("adm-offline-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Disbursing Funds… ⏳"; }
+
+    try {
+      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, {
+        amount,
+        payout_channel,
+        bank_name,
+        account_number,
+        account_name,
+        notes
+      });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Payout disbursed successfully!", "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (err) {
+      API.showToast(err.message || "Payout disbursement failed", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "💸 Disburse Payout Now"; }
+    }
+  },
+
+  async disburseRiderFuelPayout(riderId, suggestedAmount, riderName) {
+    const amountStr = prompt(`Enter fuel allowance payout amount for ${riderName} (₦):`, suggestedAmount || 1000);
+    if (!amountStr) return;
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount <= 0) {
+      API.showToast("Invalid fuel allowance amount", "error");
+      return;
+    }
+    const notes = prompt("Enter memo or note (e.g. Daily Fuel - Katsina Hub):", `Daily Fuel Allowance for ${riderName}`) || "Daily Fuel Allowance";
+    try {
+      const res = await API.post("/api/finance/internal-fleet-fuel-payout", {
+        rider_id: riderId,
+        amount: amount,
+        notes: notes
+      });
+      API.showToast(res.message || `Fuel payout of ₦${amount.toLocaleString()} credited successfully!`, "success");
+      this.render();
+      if (window.MobileApp) window.MobileApp.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to disburse fuel allowance", "error");
+    }
+  },
+
 };
+
 
 window.AdminPortal = AdminPortal;

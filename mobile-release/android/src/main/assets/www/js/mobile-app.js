@@ -14,8 +14,24 @@ const MobileApp = {
   selectedCategory: "",
   searchQuery: "",
   notifications: [],
+  hideBalance: localStorage.getItem('rp_hide_balance') === 'true',
+  isStoreClosed: localStorage.getItem('rp_store_closed') === 'true',
+  isRiderOnline: localStorage.getItem('rp_rider_online') !== 'false',
+  deliveryLat: 12.9820,
+  deliveryLng: 7.5950,
+  deliveryAddress: "GRA Residential Main Road, Katsina",
+  deliveryFee: 1200.0,
+  deliveryDistanceKm: 3.2,
+  deliveryDurationMin: 14,
+  checkoutMap: null,
+  checkoutMarker: null,
+  checkoutStoreMarker: null,
+  checkoutRouteLine: null,
+  geocodeDebounceTimer: null,
 
   init() {
+    // Auto-detect if user just returned from Flutterwave payment
+    this.checkAndProcessTopupReturn();
     this.render();
   },
 
@@ -40,18 +56,258 @@ const MobileApp = {
     }
   },
 
+  toggleBalanceVisibility() {
+    this.hideBalance = !this.hideBalance;
+    localStorage.setItem('rp_hide_balance', this.hideBalance);
+    this.render();
+  },
+
+  selectSavedAddress(addr, lat, lon) {
+    const input = document.getElementById('checkout-address');
+    if (input) input.value = addr;
+    this.deliveryAddress = addr;
+    this.deliveryLat = lat;
+    this.deliveryLng = lon;
+    API.showToast(`📍 Location: ${addr}`, 'success');
+    if (this.checkoutMarker && this.checkoutMap) {
+      this.checkoutMarker.setLatLng([lat, lon]);
+      this.checkoutMap.setView([lat, lon], 14);
+      if (this.checkoutRouteLine && this.checkoutStoreMarker) {
+        this.checkoutRouteLine.setLatLngs([this.checkoutStoreMarker.getLatLng(), [lat, lon]]);
+      }
+    }
+    this.updateLiveDeliveryQuote();
+  },
+
+  onAddressTyped(query) {
+    this.deliveryAddress = query;
+    clearTimeout(this.geocodeDebounceTimer);
+    if (!query || query.trim().length < 3) return;
+    
+    this.geocodeDebounceTimer = setTimeout(async () => {
+      try {
+        const res = await API.get(`/api/marketplace/geocode?query=${encodeURIComponent(query.trim())}`);
+        if (res && res.location) {
+          const loc = res.location;
+          this.deliveryLat = loc.latitude;
+          this.deliveryLng = loc.longitude;
+          if (this.checkoutMarker && this.checkoutMap) {
+            this.checkoutMarker.setLatLng([loc.latitude, loc.longitude]);
+            this.checkoutMap.setView([loc.latitude, loc.longitude], 14);
+            if (this.checkoutRouteLine && this.checkoutStoreMarker) {
+              this.checkoutRouteLine.setLatLngs([this.checkoutStoreMarker.getLatLng(), [loc.latitude, loc.longitude]]);
+            }
+          }
+          await this.updateLiveDeliveryQuote();
+          API.showToast(`📍 Map Aligned: ${loc.formatted_address || query}`, 'info');
+        }
+      } catch (e) {
+        console.warn('Geocoding error:', e);
+      }
+    }, 450);
+  },
+
+  async updateLiveDeliveryQuote() {
+    if (!this.cart || this.cart.length === 0) return;
+    const storeId = this.cart[0].store_id;
+    const totalQty = this.cart.reduce((sum, it) => sum + it.quantity, 0);
+
+    try {
+      const res = await API.post('/api/marketplace/calculate-delivery-quote', {
+        store_id: storeId,
+        customer_lat: this.deliveryLat,
+        customer_lon: this.deliveryLng,
+        cargo_weight_kg: 2.0
+      });
+
+      if (res && res.routing) {
+        const r = res.routing;
+        let baseFee = r.pricing ? r.pricing.total_delivery_fee : 1200.0;
+        
+        // Multi-item rule: buying multiple items in same shop adds +0.2% per item
+        if (this.cart.length > 1) {
+          baseFee += baseFee * (0.002 * (this.cart.length - 1));
+        }
+        // If total quantity > 5: add 4% of delivery of products
+        if (totalQty > 5) {
+          baseFee += baseFee * 0.04;
+        }
+
+        this.deliveryFee = Math.round(baseFee);
+        this.deliveryDistanceKm = r.distance_km || 3.2;
+        this.deliveryDurationMin = r.estimated_duration_minutes || 14;
+
+        // Update DOM elements live
+        const feeEl = document.getElementById('checkout-delivery-fee-val');
+        if (feeEl) feeEl.innerText = `₦${this.deliveryFee.toLocaleString()}`;
+
+        const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const total = subtotal + this.deliveryFee;
+
+        const totalEl = document.getElementById('checkout-total-val');
+        if (totalEl) totalEl.innerText = `₦${total.toLocaleString()}`;
+
+        const flwBtnText = document.getElementById('flw-pay-btn-text');
+        if (flwBtnText) flwBtnText.innerText = `⚡ Pay ₦${total.toLocaleString()} with Flutterwave`;
+
+        const distBadge = document.getElementById('checkout-distance-badge');
+        if (distBadge) {
+          distBadge.innerHTML = `🛣️ <strong>${this.deliveryDistanceKm} km</strong> road distance • ~<strong>${this.deliveryDurationMin} mins</strong> arrival`;
+        }
+
+        const formulaBadge = document.getElementById('checkout-formula-badge');
+        if (formulaBadge) {
+          formulaBadge.innerText = `Calculated by real road distance${this.cart.length > 1 ? ` (+${((this.cart.length - 1) * 0.2).toFixed(1)}% multi-item)` : ''}${totalQty > 5 ? ' (+4% bulk qty)' : ''}`;
+        }
+      }
+    } catch(e) {
+      console.warn('Delivery quote error:', e);
+    }
+  },
+
+  initCheckoutMiniMap() {
+    setTimeout(async () => {
+      const mapContainer = document.getElementById('checkout-mini-map');
+      if (!mapContainer || typeof L === 'undefined') return;
+      
+      if (this.checkoutMap) {
+        try { this.checkoutMap.remove(); } catch(e){}
+        this.checkoutMap = null;
+      }
+
+      let storeLat = 12.9908, storeLng = 7.6018, storeName = "Vendor Stall";
+      try {
+        if (this.cart[0] && this.cart[0].store_id) {
+          const sRes = await API.get(`/api/marketplace/stores/${this.cart[0].store_id}`);
+          if (sRes && sRes.store) {
+            storeLat = sRes.store.latitude || 12.9908;
+            storeLng = sRes.store.longitude || 7.6018;
+            storeName = sRes.store.store_name || "Vendor Stall";
+          }
+        }
+      } catch(e){}
+
+      const custLat = this.deliveryLat || 12.9820;
+      const custLng = this.deliveryLng || 7.5950;
+
+      this.checkoutMap = L.map('checkout-mini-map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([custLat, custLng], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18
+      }).addTo(this.checkoutMap);
+
+      const storeIcon = L.divIcon({
+        className: 'custom-map-icon',
+        html: `<div style="background: #7F1D1D; color: #FFF; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px solid #FFF;">🏪</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+      this.checkoutStoreMarker = L.marker([storeLat, storeLng], { icon: storeIcon })
+        .addTo(this.checkoutMap)
+        .bindPopup(`<b>${storeName}</b><br>Pickup Origin`);
+
+      const custIcon = L.divIcon({
+        className: 'custom-map-icon',
+        html: `<div style="background: #059669; color: #FFF; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 2px 10px rgba(5,150,105,0.5); border: 2px solid #FFF;">📍</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 28]
+      });
+      this.checkoutMarker = L.marker([custLat, custLng], { icon: custIcon, draggable: true })
+        .addTo(this.checkoutMap)
+        .bindPopup(`<b>Your Dropoff Point</b><br>Drag pin to adjust location!`);
+
+      this.checkoutRouteLine = L.polyline([[storeLat, storeLng], [custLat, custLng]], {
+        color: '#B91C1C',
+        weight: 3,
+        dashArray: '5, 8',
+        opacity: 0.8
+      }).addTo(this.checkoutMap);
+
+      try {
+        this.checkoutMap.fitBounds([[storeLat, storeLng], [custLat, custLng]], { padding: [25, 25] });
+      } catch(e){}
+
+      this.checkoutMarker.on('dragend', async (e) => {
+        const pos = e.target.getLatLng();
+        this.deliveryLat = pos.lat;
+        this.deliveryLng = pos.lng;
+        if (this.checkoutRouteLine) {
+          this.checkoutRouteLine.setLatLngs([[storeLat, storeLng], [pos.lat, pos.lng]]);
+        }
+        try {
+          const rev = await API.get(`/api/marketplace/reverse-geocode?lat=${pos.lat}&lon=${pos.lng}`);
+          if (rev && rev.address && rev.address.formatted_address) {
+            this.deliveryAddress = rev.address.formatted_address;
+            const input = document.getElementById('checkout-address');
+            if (input) input.value = this.deliveryAddress;
+            API.showToast(`📍 Dropoff: ${this.deliveryAddress}`, 'info');
+          }
+        } catch(e){}
+        this.updateLiveDeliveryQuote();
+      });
+
+      this.checkoutMap.on('click', async (e) => {
+        const pos = e.latlng;
+        this.deliveryLat = pos.lat;
+        this.deliveryLng = pos.lng;
+        this.checkoutMarker.setLatLng(pos);
+        if (this.checkoutRouteLine) {
+          this.checkoutRouteLine.setLatLngs([[storeLat, storeLng], [pos.lat, pos.lng]]);
+        }
+        try {
+          const rev = await API.get(`/api/marketplace/reverse-geocode?lat=${pos.lat}&lon=${pos.lng}`);
+          if (rev && rev.address && rev.address.formatted_address) {
+            this.deliveryAddress = rev.address.formatted_address;
+            const input = document.getElementById('checkout-address');
+            if (input) input.value = this.deliveryAddress;
+            API.showToast(`📍 Selected: ${this.deliveryAddress}`, 'info');
+          }
+        } catch(e){}
+        this.updateLiveDeliveryQuote();
+      });
+
+      this.updateLiveDeliveryQuote();
+    }, 150);
+  },
+
+  toggleStoreOpenStatus() {
+    this.isStoreClosed = !this.isStoreClosed;
+    localStorage.setItem('rp_store_closed', this.isStoreClosed);
+    API.showToast(this.isStoreClosed ? '🔴 Store is now marked as CLOSED' : '🟢 Store is now OPEN for orders!', this.isStoreClosed ? 'info' : 'success');
+    this.render();
+  },
+
+  toggleRiderOnlineStatus() {
+    this.isRiderOnline = !this.isRiderOnline;
+    localStorage.setItem('rp_rider_online', this.isRiderOnline);
+    API.showToast(this.isRiderOnline ? '🟢 You are now ONLINE & ready for missions!' : '⚪ You are now OFF-DUTY', this.isRiderOnline ? 'success' : 'info');
+    this.render();
+  },
+
+  async toggleProductQuickStock(productId, newQty) {
+    try {
+      await API.put(`/api/products/${productId}`, { stock_qty: newQty });
+      API.showToast(newQty > 0 ? '✅ Product is now IN STOCK!' : '⏸️ Product marked as OUT OF STOCK', 'success');
+      this.render();
+    } catch(e) {
+      API.showToast('Could not update product stock', 'error');
+    }
+  },
+
   // ==========================================
   // UNIFIED ROOT LOGIN & SIGNUP SCREEN
   // ==========================================
   renderAuthScreen(container) {
     container.innerHTML = `
       <div style="padding: 24px 20px; display: flex; flex-direction: column; min-height: 100%; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
-        <div style="text-align: center; margin-top: 10px; margin-bottom: 8px;">
-          <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #991B1B 0%, #DC2626 100%); border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; box-shadow: 0 8px 25px rgba(220,38,38,0.4); border: 1.5px solid rgba(248,113,113,0.4);">
-            <span style="font-size: 1.8rem; font-weight: 900; color: #FFF; letter-spacing: 1px;">RP</span>
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 12px;">
+          <div style="max-width: 220px; margin: 0 auto 10px; padding: 6px 14px; background: rgba(255,255,255,0.96); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 52px; width: auto; max-width: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));" alt="RushPoint Logistics">
           </div>
-          <h1 style="font-size: 1.6rem; font-weight: 900; letter-spacing: -0.5px; margin: 0; color: #FFF;">RushPoint</h1>
-          <p style="font-size: 0.72rem; font-weight: 600; opacity: 0.9; color: #FECDD3; letter-spacing: 0.5px; margin-top: 2px;">Every Delivery, On Point.</p>
+          <p style="font-size: 0.75rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 0;">Every Delivery, On Point.</p>
         </div>
 
         <!-- Role Quick-Switcher Chips -->
@@ -173,8 +429,10 @@ const MobileApp = {
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
-        <div style="text-align: center; padding-top: 8px;">
-          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 48px; object-fit: contain; margin: 0 auto 6px; display: block; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint">
+        <div style="text-align: center; padding-top: 10px; margin-bottom: 8px;">
+          <div style="max-width: 190px; margin: 0 auto; padding: 4px 10px; background: rgba(255,255,255,0.95); border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); border: 1px solid #F1F5F9; display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 44px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
+          </div>
         </div>
         <div class="modal-header" style="padding-top: 0;">
           <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-primary);">🛍️ Create Customer Account</h3>
@@ -414,10 +672,25 @@ const MobileApp = {
           </div>
         </div>
 
-        <!-- App Body Content -->
         <div class="mobile-content-area" id="mob-content-area">
           ${this.getCustomerTabHtml(categories, products, stores, wallet, user, orders)}
         </div>
+
+        <!-- Floating Cart Summary Bar (When items in cart and not on cart tab) -->
+        ${cartCount > 0 && this.activeTab !== 'cart' ? `
+          <div style="position: absolute; bottom: 66px; left: 14px; right: 14px; background: linear-gradient(135deg, #7F1D1D 0%, #BE123C 100%); color: #FFF; padding: 10px 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 8px 24px rgba(127,29,29,0.38); z-index: 100;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.2rem;">🛍️</span>
+              <div>
+                <div style="font-size: 0.82rem; font-weight: 800;">${cartCount} items in cart</div>
+                <div style="font-size: 0.68rem; opacity: 0.9;">Ready for fast checkout</div>
+              </div>
+            </div>
+            <button onclick="MobileApp.switchTab('cart')" style="background: #FFF; color: #881337; border: none; padding: 6px 14px; border-radius: 10px; font-weight: 900; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+              Checkout ➔
+            </button>
+          </div>
+        ` : ''}
 
         <!-- OPay Style 5-Tab Bottom Navigation -->
         <div class="mobile-bottom-nav">
@@ -574,8 +847,14 @@ const MobileApp = {
             <div style="font-size: 0.72rem; font-weight: 700; opacity: 0.85; letter-spacing: 0.5px; text-transform: uppercase;">Total Wallet Balance</div>
             <span style="background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 700;">🔒 Tier-3 Verified</span>
           </div>
-          <div style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.5px; margin: 4px 0 12px; display: flex; align-items: center; gap: 8px;">
-            <span>₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+          <div style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.5px; margin: 4px 0 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>${MobileApp.hideBalance ? '••••••••' : '₦' + wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              <button onclick="MobileApp.toggleBalanceVisibility()" style="background: rgba(255,255,255,0.18); border: none; border-radius: 8px; color: #FFF; padding: 4px 7px; font-size: 0.82rem; cursor: pointer; display: flex; align-items: center;" title="Toggle balance visibility">
+                ${MobileApp.hideBalance ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <span style="font-size: 0.65rem; background: rgba(0,0,0,0.22); padding: 3px 8px; border-radius: 8px; font-weight: 700; opacity: 0.9;">Wema Bank Escrow</span>
           </div>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px;">
@@ -747,7 +1026,10 @@ const MobileApp = {
       `;
     }
 
-    if (this.activeTab === "cart") return this.getCartHtml();
+    if (this.activeTab === "cart") {
+      this.initCheckoutMiniMap();
+      return this.getCartHtml();
+    }
     if (this.activeTab === "orders") return this.getCustomerOrdersHtml(orders);
     if (this.activeTab === "logistics") return this.getIndependentLogisticsHtml();
     if (this.activeTab === "support") return this.getCustomerSupportHtml();
@@ -767,132 +1049,7 @@ const MobileApp = {
     this.render();
   },
 
-  getCartHtml() {
-    if (this.cart.length === 0) {
-      return `
-        <div style="text-align: center; padding: 40px 20px;">
-          <div style="font-size: 3rem; margin-bottom: 10px;">🛒</div>
-          <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">Your Cart is Empty</h3>
-          <p style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">Explore physical vendor stalls and add items to your cart.</p>
-          <button onclick="MobileApp.switchTab('home')" class="btn-primary" style="margin-top: 14px; border-radius: 12px; padding: 10px 20px; background: #B91C1C;">Browse Products</button>
-        </div>
-      `;
-    }
 
-    const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const totalQty = this.cart.reduce((sum, item) => sum + item.quantity, 0);
-    
-    // Internal Intelligent Heuristic Calculation for Heavy/Bulky items
-    const heavyKeywords = ['cement', 'block', 'blocks', 'steel', 'rod', 'iron', 'sandcrete', 'hectare', 'land', 'ton', 'tonne', 'generator', 'machinery'];
-    let heavyCount = 0;
-    
-    this.cart.forEach(it => {
-      const n = (it.name || '').toLowerCase();
-      if (it.is_heavy || heavyKeywords.some(k => n.includes(k))) {
-        heavyCount += it.quantity;
-      }
-    });
-
-    const baseDelivery = 1200.0;
-    let heavySurcharge = 0.0;
-    let vehicleType = "🏍️ Motorcycle (Express Bike)";
-
-    if (heavyCount > 0) {
-      vehicleType = "🛺 Tricycle (Cargo Keke / Van)";
-      heavySurcharge = 1500.0 + (Math.max(0, heavyCount - 1) * 500.0);
-    }
-
-    const totalDelivery = baseDelivery + heavySurcharge;
-    const platformFee = 150.0;
-    const total = subtotal + totalDelivery + platformFee;
-
-    return `
-      <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">Review Shopping Cart (${this.cart.length} items)</div>
-        <div style="flex: 1; overflow-y: auto;">
-          ${this.cart.map((item, idx) => `
-            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-              <div>
-                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">${item.name}</div>
-                <div style="font-size: 0.75rem; color: #B91C1C; font-weight: 800; margin-top: 2px;">₦${item.price.toLocaleString()} x ${item.quantity} = ₦${(item.price * item.quantity).toLocaleString()}</div>
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <button onclick="MobileApp.updateCartQty(${idx}, -1)" class="btn-secondary btn-sm" style="padding: 3px 10px; border-radius: 8px; font-weight: 800;">-</button>
-                <span style="font-weight: 800; font-size: 0.85rem;">${item.quantity}</span>
-                <button onclick="MobileApp.updateCartQty(${idx}, 1)" class="btn-secondary btn-sm" style="padding: 3px 10px; border-radius: 8px; font-weight: 800;">+</button>
-              </div>
-            </div>
-          `).join('')}
-
-          <!-- Transparent Delivery & Price Breakdown -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-top: 12px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Vendor Product Price (100% Retained):</span>
-              <strong>₦${subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Base Delivery Fare:</span>
-              <span>₦${baseDelivery.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-
-            ${heavyCount > 0 ? `
-              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px; color: #B91C1C; font-weight: 800;">
-                <span>⚖️ Heavy Cargo Surcharge (${heavyCount} items):</span>
-                <span>+₦${heavySurcharge.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-              </div>
-              <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 8px; font-size: 0.68rem; color: #7F1D1D; margin-bottom: 8px;">
-                🛺 <strong>Tricycle (Keke Cargo) Required:</strong> Heavy building materials (cement/blocks) automatically increment delivery fee for appropriate transport.
-              </div>
-            ` : `
-              <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 6px 8px; font-size: 0.66rem; color: #166534; margin-bottom: 8px;">
-                ✓ <strong>0% Delivery Increment:</strong> Multiple minor/standard items from the same merchant do not increase delivery fee.
-              </div>
-            `}
-
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748B; margin-bottom: 6px;">
-              <span>Assigned Vehicle Mode:</span>
-              <strong>${vehicleType}</strong>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748B; margin-bottom: 6px;">
-              <span>Platform Service Escrow:</span>
-              <span>₦${platformFee.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
-              <span>Total to Pay:</span>
-              <span>₦${total.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-            </div>
-          </div>
-
-          <div style="margin-top: 14px;">
-            <div class="rp-form-group">
-              <label class="rp-label">Delivery Address</label>
-              <input type="text" id="checkout-address" class="rp-input" value="14 Marina Street, Lagos Island" placeholder="Street, landmark, city" style="border-radius: 10px;">
-            </div>
-            <div class="rp-form-group">
-              <label class="rp-label">Customer Phone</label>
-              <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
-            </div>
-
-            <!-- Payment Methods: Flutterwave vs Wallet -->
-            <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Instant Payment Option:</div>
-            
-            <!-- Flutterwave Gateway Button -->
-            <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
-              <span>⚡ Pay ₦${total.toLocaleString()} via Flutterwave</span>
-            </button>
-
-            <!-- RP Wallet Button -->
-            <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
-              <span>👛 Pay with RushPoint Wallet</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  },
 
   getCustomerAccountHtml(wallet, user) {
     return `
@@ -1138,13 +1295,26 @@ const MobileApp = {
     }
 
     const subtotal = this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFee = 1200.0;
+    const totalQty = this.cart.reduce((sum, item) => sum + item.quantity, 0);
+    const deliveryFee = this.deliveryFee || 1200.0;
     const total = subtotal + deliveryFee;
+
+    // Temu-style Recommended Items (Frequently Bought Together)
+    const recommendedItems = [
+      { id: "rec-1", name: "Family Fresh Bread", price: 1200, origPrice: 1500, discount: "-20%", rating: "4.9", sold: "128 sold", img: "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=200", store_id: this.cart[0]?.store_id },
+      { id: "rec-2", name: "Premium Honey Jar (500g)", price: 2200, origPrice: 2800, discount: "-21%", rating: "5.0", sold: "86 sold", img: "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=200", store_id: this.cart[0]?.store_id },
+      { id: "rec-3", name: "Cold Malt Energy Can", price: 650, origPrice: 800, discount: "-18%", rating: "4.8", sold: "240 sold", img: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=200", store_id: this.cart[0]?.store_id }
+    ];
 
     return `
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">Review Shopping Cart (${this.cart.length})</div>
-        <div style="flex: 1; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B;">Review Shopping Cart (${this.cart.length})</div>
+          <span style="font-size: 0.65rem; background: #FEF2F2; color: #B91C1C; padding: 2px 8px; border-radius: 10px; font-weight: 800;">⚡ 15-30 Min Dispatch</span>
+        </div>
+
+        <div style="flex: 1; overflow-y: auto; padding-bottom: 20px;">
+          <!-- Cart Items -->
           ${this.cart.map((item, idx) => `
             <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
               <div>
@@ -1159,47 +1329,122 @@ const MobileApp = {
             </div>
           `).join('')}
 
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-top: 12px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Items Subtotal:</span>
-              <span>₦${subtotal.toLocaleString()}</span>
+          <!-- Temu-Style Consumer Trust & Escrow Guarantee Card -->
+          <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFFBEB 100%); border: 1px solid #FECACA; border-radius: 14px; padding: 12px; margin-top: 10px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+              <span style="font-size: 1.15rem;">🛡️</span>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 900; color: #991B1B;">RushPoint 100% Escrow Guarantee</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 700;">Zero Risk • Delivered Safely or Instant Refund</div>
+              </div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
-              <span>Delivery Fee (Express Dispatch):</span>
-              <span>₦${deliveryFee.toLocaleString()}</span>
+            <div style="font-size: 0.68rem; color: #475569; line-height: 1.45;">
+              • <strong>4-Digit Delivery PIN:</strong> Payment remains locked in escrow until you inspect your items and share your PIN.<br>
+              • <strong>Guaranteed On-Time:</strong> Arrives within estimated window or receive ₦300 wallet compensation credit.<br>
+              • <strong>Missing Item Protection:</strong> 100% instant refund for damaged or unavailable products.
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.95rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
+          </div>
+
+          <!-- Dynamic Distance & Pricing Breakdown -->
+          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
+              <span style="color: #64748B;">Items Subtotal (${totalQty} units):</span>
+              <strong>₦${subtotal.toLocaleString()}</strong>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 6px;">
+              <div>
+                <span>Delivery Fee:</span>
+                <div id="checkout-formula-badge" style="font-size: 0.62rem; color: #059669; font-weight: 700;">Calculated by real road distance${this.cart.length > 1 ? ` (+${((this.cart.length - 1) * 0.2).toFixed(1)}% multi-item)` : ''}${totalQty > 5 ? ' (+4% bulk qty)' : ''}</div>
+              </div>
+              <strong id="checkout-delivery-fee-val" style="color: #B91C1C;">₦${deliveryFee.toLocaleString()}</strong>
+            </div>
+
+            <div id="checkout-distance-badge" style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 6px 10px; font-size: 0.7rem; color: #1E40AF; margin: 8px 0;">
+              🛣️ <strong>${this.deliveryDistanceKm} km</strong> road distance • ~<strong>${this.deliveryDurationMin} mins</strong> arrival
+            </div>
+
+            <div style="display: flex; justify-content: space-between; font-size: 1rem; font-weight: 900; color: #B91C1C; border-top: 1px solid #E2E8F0; padding-top: 8px; margin-top: 8px;">
               <span>Total to Pay:</span>
-              <span>₦${total.toLocaleString()}</span>
+              <span id="checkout-total-val">₦${total.toLocaleString()}</span>
             </div>
           </div>
 
-          <div style="margin-top: 14px;">
-            <div class="rp-form-group">
-              <label class="rp-label">Delivery Address</label>
-              <input type="text" id="checkout-address" class="rp-input" value="14 Marina Street, Lagos Island" placeholder="Street, landmark, city" style="border-radius: 10px;">
-              <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 5px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                📍 Use My Device GPS Location (Auto-Detect)
-              </button>
-            </div>
-            <div class="rp-form-group">
-              <label class="rp-label">Customer Phone</label>
-              <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
-            </div>
-
-            <!-- Payment Methods: Flutterwave vs Wallet -->
-            <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Payment Method:</div>
+          <!-- Address & Map Location Alignment -->
+          <div class="rp-form-group" style="margin-bottom: 12px;">
+            <label class="rp-label" style="display: flex; justify-content: space-between;">
+              <span>Delivery Address</span>
+              <span style="font-size: 0.62rem; color: #2563EB; font-weight: 700;">🗺️ Aligns with Live GPS Map</span>
+            </label>
+            <input type="text" id="checkout-address" class="rp-input" value="${this.deliveryAddress}" oninput="MobileApp.onAddressTyped(this.value)" placeholder="Type street, landmark, or area" style="border-radius: 10px;">
             
-            <!-- Flutterwave Gateway Button -->
-            <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
-              <span>⚡ Pay ₦${total.toLocaleString()} with Flutterwave</span>
+            <!-- Quick Saved Delivery Addresses -->
+            <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+              <button type="button" onclick="MobileApp.selectSavedAddress('GRA Residential Main Road, Katsina', 12.9820, 7.5950)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏠 Home (GRA)</button>
+              <button type="button" onclick="MobileApp.selectSavedAddress('UMYU University Campus, Katsina', 12.8950, 7.6320)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏫 Campus (UMYU)</button>
+              <button type="button" onclick="MobileApp.selectSavedAddress('Katsina Central Commercial Market', 12.9908, 7.6018)" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 6px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 800; color: #1E293B; cursor: pointer; white-space:nowrap;">🏬 Market Hub</button>
+            </div>
+
+            <button type="button" onclick="MobileApp.useCustomerDeviceGps('checkout-address')" style="margin-top: 6px; background: #EFF6FF; border: 1px dashed #2563EB; color: #1D4ED8; font-size: 0.68rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;">
+              📍 Use My Device GPS Location (Auto-Detect)
             </button>
 
-            <!-- RP Wallet Button -->
-            <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
-              <span>👛 Pay with RushPoint Wallet</span>
-            </button>
+            <!-- Interactive Checkout Mini-Map -->
+            <div style="margin-top: 8px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #64748B; margin-bottom: 4px;">
+                <span>📍 Live Route Pin (Drag pin or click map to adjust dropoff)</span>
+                <span style="color: #059669; font-weight: 700;">Auto-Calculating Fee</span>
+              </div>
+              <div id="checkout-mini-map" style="height: 140px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
+            </div>
           </div>
+
+          <div class="rp-form-group" style="margin-bottom: 14px;">
+            <label class="rp-label">Customer Contact Phone</label>
+            <input type="tel" id="checkout-phone" class="rp-input" value="+2348077770001" style="border-radius: 10px;">
+          </div>
+
+          <!-- Temu-Style Frequently Bought Together Recommendations -->
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #1E293B;">🔥 Frequently Bought Together</div>
+              <span style="font-size: 0.62rem; color: #EA580C; font-weight: 700;">Save on Combined Delivery</span>
+            </div>
+            <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;">
+              ${recommendedItems.map(rec => `
+                <div style="min-width: 130px; max-width: 130px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 8px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.02); display: flex; flex-direction: column; justify-content: space-between;">
+                  <div style="position: relative; height: 75px; border-radius: 8px; overflow: hidden; margin-bottom: 6px;">
+                    <img src="${rec.img}" alt="${rec.name}" style="width: 100%; height: 100%; object-fit: cover;">
+                    <span style="position: absolute; top: 4px; left: 4px; background: #EF4444; color: #FFF; font-size: 0.52rem; font-weight: 900; padding: 1px 4px; border-radius: 4px;">${rec.discount}</span>
+                  </div>
+                  <div>
+                    <div style="font-size: 0.68rem; font-weight: 800; color: #1E293B; line-height: 1.2; height: 26px; overflow: hidden;">${rec.name}</div>
+                    <div style="font-size: 0.58rem; color: #64748B; margin-top: 2px;">★ ${rec.rating} • ${rec.sold}</div>
+                    <div style="display: flex; align-items: baseline; gap: 4px; margin-top: 4px;">
+                      <span style="font-size: 0.78rem; font-weight: 900; color: #B91C1C;">₦${rec.price.toLocaleString()}</span>
+                      <span style="font-size: 0.58rem; color: #94A3B8; text-decoration: line-through;">₦${rec.origPrice.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <button onclick="MobileApp.addToCart('${rec.id}', '${rec.name}', ${rec.price}, '${rec.store_id}'); MobileApp.updateLiveDeliveryQuote();" style="width: 100%; margin-top: 6px; background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; padding: 5px 0; border-radius: 8px; font-size: 0.65rem; font-weight: 800; cursor: pointer;">
+                    + Add to Cart
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Payment Methods: Flutterwave vs Wallet -->
+          <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B; margin: 10px 0 6px;">Select Payment Method:</div>
+          
+          <!-- Flutterwave Gateway Button -->
+          <button onclick="MobileApp.openFlutterwaveModal(${total})" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.9rem; background: linear-gradient(135deg, #F5A623 0%, #EA580C 100%); margin-bottom: 8px; border-radius: 12px; box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3); font-weight: 800;">
+            <span id="flw-pay-btn-text">⚡ Pay ₦${total.toLocaleString()} with Flutterwave</span>
+          </button>
+
+          <!-- RP Wallet Button -->
+          <button onclick="MobileApp.handleCheckout('WALLET')" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.84rem; font-weight: 800; border-radius: 12px;">
+            <span>👛 Pay with RushPoint Wallet</span>
+          </button>
         </div>
       </div>
     `;
@@ -1221,92 +1466,67 @@ const MobileApp = {
       return;
     }
 
-    let dedicatedAcc = null;
+    let walletBal = 0;
     try {
       const wRes = await API.get("/api/finance/wallet/dedicated-account");
-      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
+      if (wRes && wRes.wallet_balance !== undefined) walletBal = wRes.wallet_balance;
     } catch(e) {}
-
-    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
-    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
 
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px; overflow: hidden; padding: 0;">
+      <div class="modal-dialog" style="max-width: 410px; border-radius: 22px; overflow: hidden; padding: 0;">
         <!-- Header -->
-        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <div style="font-size: 0.68rem; font-weight: 800; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">256-Bit SSL Secured</div>
-            <div style="font-size: 1.15rem; font-weight: 900;">Multi-Payment Checkout</div>
+            <div style="font-size: 0.65rem; font-weight: 800; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">256-Bit SSL Secured Escrow</div>
+            <div style="font-size: 1.2rem; font-weight: 900;">Multi-Payment Checkout</div>
           </div>
-          <div style="font-size: 1.2rem; cursor: pointer;" onclick="this.closest('.modal-backdrop').remove()">✕</div>
+          <div style="font-size: 1.2rem; cursor: pointer; background: rgba(255,255,255,0.2); width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;" onclick="this.closest('.modal-backdrop').remove()">✕</div>
         </div>
 
-        <div style="padding: 16px; max-height: 80vh; overflow-y: auto;">
+        <div style="padding: 16px 18px; max-height: 80vh; overflow-y: auto;">
           <!-- Amount Banner -->
-          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; text-align: center; margin-bottom: 14px;">
-            <div style="font-size: 0.7rem; color: #7F1D1D; font-weight: 800;">TOTAL AMOUNT TO PAY</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #991B1B;">₦${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-            <div style="font-size: 0.68rem; color: #059669; font-weight: 700; margin-top: 2px;">🛡️ 4-Way Delivery Escrow Protected</div>
+          <div style="background: #FEF2F2; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px; text-align: center; margin-bottom: 14px;">
+            <div style="font-size: 0.68rem; color: #7F1D1D; font-weight: 800;">TOTAL AMOUNT DUE</div>
+            <div style="font-size: 1.8rem; font-weight: 900; color: #991B1B; letter-spacing: -0.5px;">₦${totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            <div style="font-size: 0.68rem; color: #059669; font-weight: 800; margin-top: 2px;">🛡️ 4-Way Escrow: Released Only Upon 4-Digit Delivery PIN Verification</div>
           </div>
 
-          <!-- Payment Methods Selector -->
-          <div style="font-size: 0.8rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Payment Option:</div>
+          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Choose Payment Channel:</div>
 
-          <!-- 1. Direct Bank Transfer Card -->
-          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Direct Bank Transfer</span>
-              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">MOST POPULAR</span>
+          <!-- 1. WALLET CHECKOUT (If funds available) -->
+          <div style="background: ${walletBal >= totalAmount ? '#ECFDF5' : '#F8FAFC'}; border: 1.5px solid ${walletBal >= totalAmount ? '#86EFAC' : '#E2E8F0'}; border-radius: 14px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 0.85rem; font-weight: 900; color: ${walletBal >= totalAmount ? '#065F46' : '#64748B'};">🟢 RushPoint Customer Wallet</span>
+              <span style="font-size: 0.7rem; color: #64748B; font-weight: 700;">Balance: ₦${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
             </div>
-            <div style="font-size: 0.72rem; color: #374151; margin-bottom: 8px;">Transfer from OPay, Kuda, GTBank, Zenith, PalmPay:</div>
-            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
-                <div style="font-size: 1.1rem; font-weight: 900; color: #14532D; letter-spacing: 1px;" id="checkout-bank-acc">${accNum}</div>
-                <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Account number copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
-                Copy
+            ${walletBal >= totalAmount ? `
+              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'WALLET')" style="width: 100%; margin-top: 8px; background: #059669; color: #FFF; border: none; padding: 12px; border-radius: 10px; font-weight: 900; font-size: 0.88rem; cursor: pointer;">
+                ⚡ Pay Instantly from Wallet (₦${totalAmount.toLocaleString()})
               </button>
-            </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'BANK_TRANSFER')" style="width: 100%; margin-top: 8px; background: #166534; color: #FFF; border: none; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">
-              I Have Made This Transfer ➔
-            </button>
+            ` : `
+              <div style="font-size: 0.72rem; color: #DC2626; margin-top: 4px; font-weight: 600;">Wallet balance insufficient. Click Continue to Pay below to pay via Bank Transfer, Card, OPay or USSD.</div>
+            `}
           </div>
 
-          <!-- 2. Online Card Payment -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">💳 Debit / Credit Card</div>
-              <div style="font-size: 0.68rem; color: #64748B;">Mastercard, Visa, Verve (Flutterwave)</div>
+          <!-- 2. LIVE FLUTTERWAVE GATEWAY (Bank Transfer, Card, USSD, OPay) -->
+          <div style="background: #FFF; border: 1.5px solid #CBD5E1; border-radius: 14px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 0.85rem; font-weight: 900; color: #0F172A;">🔐 Online / Bank Transfer Payment</span>
+              <span style="font-size: 0.62rem; background: #EFF6FF; color: #1D4ED8; padding: 2px 8px; border-radius: 6px; font-weight: 800;">REAL TIME</span>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'CARD')" style="background: #B91C1C; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Pay with Card
-            </button>
-          </div>
-
-          <!-- 3. USSD Code -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">📱 USSD Banking Code</div>
-              <div style="font-size: 0.68rem; color: #64748B;">*737#, *901#, *894# Instant Dial</div>
+            <p style="font-size: 0.72rem; color: #475569; line-height: 1.4; margin-bottom: 12px;">
+              Pay with your Nigerian bank app (live account number provided), OPay, Debit Card (Mastercard/Visa/Verve), or USSD.
+            </p>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+              <span style="background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">🏦 Bank Transfer</span>
+              <span style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">💳 ATM Card</span>
+              <span style="background: #FDF2F8; color: #BE185D; border: 1px solid #FBCFE8; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">🔴 OPay</span>
+              <span style="background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">📱 USSD</span>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'USSD')" style="background: #334155; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Pay via USSD
-            </button>
-          </div>
-
-          <!-- 4. QR Code -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">🔳 Scan to Pay (QR Code)</div>
-              <div style="font-size: 0.68rem; color: #64748B;">Scan from your mobile bank application</div>
-            </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'QR_CODE')" style="background: #0284C7; color: #FFF; border: none; padding: 7px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Show QR
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'FLUTTERWAVE')" style="width: 100%; background: linear-gradient(135deg, #B91C1C, #DC2626); color: #FFF; border: none; padding: 13px; border-radius: 12px; font-weight: 900; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <span>🔐</span> Continue to Live Payment (₦${totalAmount.toLocaleString()})
             </button>
           </div>
         </div>
@@ -1320,8 +1540,8 @@ const MobileApp = {
     if (overlay) overlay.innerHTML = `
       <div class="modal-dialog" style="max-width: 320px; text-align: center; padding: 24px; border-radius: 20px;">
         <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
-        <div style="font-size: 1rem; font-weight: 900; color: #1E293B; margin-bottom: 6px;">Processing Transaction...</div>
-        <div style="font-size: 0.75rem; color: #64748B;">Connecting to Flutterwave gateway & securing 4-way escrow.</div>
+        <div style="font-size: 1rem; font-weight: 900; color: #1E293B; margin-bottom: 6px;">Creating Order & Payment Link...</div>
+        <div style="font-size: 0.75rem; color: #64748B;">Connecting to Flutterwave secure gateway.</div>
       </div>
     `;
 
@@ -1336,14 +1556,31 @@ const MobileApp = {
 
       const res = await API.post("/api/marketplace/checkout", payload);
       document.querySelector(".rp-modal-overlay")?.remove();
-      this.cart = [];
-      this.activeTab = "orders";
-      API.showToast(`Order Placed (${res.order_ref})! 4-Digit Delivery PIN: ${res.pod_otp || '8899'}`, "success");
-      this.render();
-      if (window.AdminPortal) window.AdminPortal.init();
+
+      if (res.requires_payment && res.payment_link) {
+        // Gateway payment — store order info and redirect to Flutterwave
+        sessionStorage.setItem("rp_pending_order_ref", res.order_ref);
+        sessionStorage.setItem("rp_pending_order_id", res.order_id);
+        this.cart = [];
+        API.showToast(`Order ${res.order_ref} created! Redirecting to payment...`, "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 800);
+      } else if (res.requires_payment && !res.payment_link) {
+        // Gateway was selected but Flutterwave link failed — still show order
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`Order ${res.order_ref} created. ⚠️ Complete payment manually — contact support if needed.`, "warning");
+        this.render();
+      } else {
+        // Wallet payment — instant success
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`✅ Order ${res.order_ref} placed & paid! Delivery OTP: ${res.pod_otp || '----'}`, "success");
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.init();
+      }
     } catch (e) {
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(e.message || "Failed to complete payment. Please check balance or try card.", "error");
+      API.showToast(e.message || "Failed to place order. Please check your balance or try again.", "error");
     }
   },
 
@@ -1355,6 +1592,9 @@ const MobileApp = {
       return;
     }
 
+    const btn = document.getElementById("btn-place-order") || document.getElementById("btn-wallet-checkout");
+    if (btn) { btn.disabled = true; btn.textContent = "Processing... ⏳"; }
+
     try {
       const payload = {
         store_id: this.cart[0].store_id,
@@ -1365,13 +1605,28 @@ const MobileApp = {
       };
 
       const res = await API.post("/api/marketplace/checkout", payload);
-      this.cart = [];
-      this.activeTab = "orders";
-      API.showToast(`Order ${res.order_ref} placed! Vendor credited 100% product price instantly.`, "success");
-      this.render();
-      if (window.AdminPortal) window.AdminPortal.init();
-    } catch (e) {}
+
+      if (res.requires_payment && res.payment_link) {
+        // Gateway payment — redirect to Flutterwave
+        sessionStorage.setItem("rp_pending_order_ref", res.order_ref);
+        sessionStorage.setItem("rp_pending_order_id", res.order_id);
+        this.cart = [];
+        API.showToast(`Order ${res.order_ref} created! Redirecting to payment...`, "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 800);
+      } else {
+        // Wallet — immediate success
+        this.cart = [];
+        this.activeTab = "orders";
+        API.showToast(`✅ Order ${res.order_ref} placed! Delivery OTP: ${res.pod_otp || '----'}`, "success");
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.init();
+      }
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = method === "WALLET" ? "Pay with Wallet" : "Pay Now"; }
+      API.showToast(e.message || "Checkout failed. Please try again.", "error");
+    }
   },
+
 
   getCustomerOrdersHtml(orders = []) {
 
@@ -1417,33 +1672,270 @@ const MobileApp = {
       const o = res.order;
       const timeline = res.timeline || [];
 
+      // Determine numeric step for 4-stage stepper
+      let currentStep = 1;
+      const s = (o.status || "").toUpperCase();
+      if (s === "DELIVERED") currentStep = 4;
+      else if (s === "IN_TRANSIT" || s === "PICKED_UP" || s === "ARRIVED") currentStep = 3;
+      else if (s === "CONFIRMED" || s === "PREPARING" || s === "ASSIGNED") currentStep = 2;
+      else currentStep = 1;
+
+      const stepProgressPct = currentStep === 1 ? 0 : currentStep === 2 ? 33 : currentStep === 3 ? 66 : 100;
+
+      const user = (typeof API !== 'undefined' && API.getUser()) || null;
+      const isCustomer = !user || user.account_type === 'CUSTOMER';
+      const allowRiderCall = Boolean(o.allow_customer_call_rider && o.rider_phone);
+
       const modal = document.createElement("div");
       modal.className = "modal-backdrop rp-modal-overlay";
       modal.innerHTML = `
-        <div class="modal-dialog" style="max-width: 360px; border-radius: 20px;">
-          <div class="modal-header">
-            <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">Tracking: ${o.order_ref}</h3>
-            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
-          </div>
-          <div style="margin-bottom: 12px; font-size: 0.75rem;">
-            <div>Status: <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span></div>
-            <div style="margin-top: 2px;">Store: <strong>${o.store_name}</strong></div>
-            <div style="margin-top: 2px;">Destination: <strong>${o.delivery_address}</strong></div>
-            ${o.rider_name ? `<div style="margin-top: 2px;">Assigned Rider: <strong>${o.rider_name}</strong></div>` : ''}
-          </div>
-          <div style="font-weight: 800; font-size: 0.8rem; margin-bottom: 8px;">Order Timeline</div>
-          <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px;">
-            ${timeline.map(t => `
-              <div style="font-size: 0.72rem;">
-                <span style="font-weight: 700; color: #B91C1C;">${t.to_status}</span>
-                <div style="font-size: 0.65rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
-                ${t.notes ? `<div style="font-size: 0.65rem; color: #64748B;">${t.notes}</div>` : ''}
+        <div class="modal-dialog" style="max-width: 400px; border-radius: 22px; overflow: hidden; padding: 0;">
+          <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.7rem; opacity: 0.85; text-transform: uppercase; font-weight: 700;">
+                ${isCustomer ? '📦 Order Delivery Status' : '📡 Fleet Dispatch Control'}
               </div>
-            `).join('')}
+              <h3 style="font-size: 1.05rem; font-weight: 900; margin: 0;">${o.order_ref}</h3>
+            </div>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
+          </div>
+
+          <div style="padding: 16px; max-height: 80vh; overflow-y: auto;">
+            <!-- 4-Stage Visual Progress Stepper (Temu-Style) -->
+            <div style="display: flex; justify-content: space-between; position: relative; margin: 12px 6px 20px; text-align: center;">
+              <div style="position: absolute; top: 12px; left: 12%; right: 12%; height: 3px; background: #E2E8F0; z-index: 1;"></div>
+              <div style="position: absolute; top: 12px; left: 12%; width: ${stepProgressPct * 0.76}%; height: 3px; background: #059669; z-index: 2; transition: width 0.3s;"></div>
+              
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 1 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 1 ? '✓' : '1'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Placed</span>
+              </div>
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 2 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 2 ? '✓' : '2'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Preparing</span>
+              </div>
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 3 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 3 ? '✓' : '3'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">In Transit</span>
+              </div>
+              <div style="position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentStep >= 4 ? '#059669' : '#E2E8F0'}; color: #FFF; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 800;">${currentStep >= 4 ? '✓' : '4'}</div>
+                <span style="font-size: 0.62rem; font-weight: 700; color: #1E293B; margin-top: 4px;">Delivered</span>
+              </div>
+            </div>
+
+            <!-- Prominent Delivery PIN Card (If not delivered) -->
+            ${o.pod_otp && o.status !== 'DELIVERED' ? `
+              <div style="background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); border: 1.5px solid #F59E0B; border-radius: 14px; padding: 12px; margin-bottom: 14px; text-align: center; box-shadow: 0 4px 12px rgba(245,158,11,0.12);">
+                <div style="font-size: 0.68rem; font-weight: 800; color: #92400E; text-transform: uppercase; letter-spacing: 0.5px;">🔒 Your 4-Digit Delivery PIN</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #B45309; letter-spacing: 6px; margin: 4px 0;">${o.pod_otp}</div>
+                <div style="font-size: 0.68rem; color: #78350F; line-height: 1.35;">Show this code to courier <strong>only after</strong> you physically inspect your parcel!</div>
+              </div>
+            ` : ''}
+
+            <!-- Key Order Details -->
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 14px; font-size: 0.74rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: #64748B;">Current Status:</span>
+                <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span>
+              </div>
+              <div style="margin-top: 4px;">🏪 Store: <strong>${o.store_name}</strong></div>
+              <div style="margin-top: 4px;">📍 Destination: <strong>${o.delivery_address}</strong></div>
+              ${o.rider_name ? `<div style="margin-top: 4px;">🛵 Assigned Courier: <strong>${o.rider_name}</strong> (${o.vehicle_type || 'Motorcycle'})</div>` : '<div style="margin-top: 4px; color: #D97706;">🛵 Courier: <em>Assigning closest available rider...</em></div>'}
+              
+              <!-- Multi-Party Communication Security -->
+              <div style="margin-top: 12px; border-top: 1px dashed #CBD5E1; padding-top: 10px;">
+                ${allowRiderCall ? `
+                  <div style="font-size: 0.68rem; color: #166534; font-weight: 700; margin-bottom: 6px;">🟢 Direct Courier Contact (Admin Approved)</div>
+                  <div style="display: flex; gap: 8px;">
+                    <a href="tel:${o.rider_phone}" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #0284C7;">📞 Call Courier</a>
+                    <a href="https://wa.me/2348007874764?text=Hello%20RushPoint%20Dispatch%2C%20inquiry%20regarding%20Order%20${o.order_ref}" target="_blank" class="btn-secondary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #059669; border-color: #A7F3D0; background: #ECFDF5;">💬 Dispatch Desk</a>
+                  </div>
+                ` : `
+                  <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 8px 10px; margin-bottom: 8px;">
+                    <div style="font-size: 0.68rem; color: #166534; font-weight: 700;">🔒 Secure Dispatch Coordination</div>
+                    <div style="font-size: 0.65rem; color: #15803D; margin-top: 2px;">RushPoint Dispatch coordinates directly with your courier to ensure your order arrives safely and on time.</div>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <a href="https://wa.me/2348007874764?text=Hello%20RushPoint%20Dispatch%2C%20inquiry%20regarding%20Order%20${o.order_ref}" target="_blank" class="btn-primary" style="flex: 1; text-align: center; justify-content: center; padding: 8px 0; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; background: #059669;">
+                      💬 Contact RushPoint Dispatch
+                    </a>
+                    <a href="tel:+2348007874764" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-decoration: none; color: #1E293B;">
+                      📞 Hotline
+                    </a>
+                  </div>
+                `}
+              </div>
+            </div>
+
+            <!-- Customer View: Temu-Style Milestone Checklist (NO MAP for customer) -->
+            ${isCustomer ? `
+              <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+                <div style="font-weight: 800; font-size: 0.8rem; color: #1E293B; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                  <span>📦 Tracking & Checkpoints</span>
+                  <span style="font-size: 0.65rem; color: #059669; font-weight: 700; background: #ECFDF5; padding: 2px 8px; border-radius: 8px;">⏱️ Est. ~15-25 Mins</span>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px; position: relative;">
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: #059669; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">✓</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Order Paid & Escrow Secured</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">4-digit release PIN generated and payment safely held in escrow.</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 2 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 2 ? '✓' : '2'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Merchant Packed & Quality Verified</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">Store has accepted order and packaged items with tamper-evident seal.</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 3 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 3 ? '✓' : '3'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Courier Dispatched to Delivery Area</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">${o.rider_name ? `Package in transit with courier ${o.rider_name}.` : 'Dispatched via RushPoint Courier Network.'}</div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <span style="width: 20px; height: 20px; border-radius: 50%; background: ${currentStep >= 4 ? '#059669' : '#CBD5E1'}; color: #FFF; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 900; flex-shrink: 0;">${currentStep >= 4 ? '✓' : '4'}</span>
+                    <div>
+                      <div style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">Doorstep Inspection & Handover</div>
+                      <div style="font-size: 0.65rem; color: #64748B;">Inspect parcel, then share your 4-digit PIN with the courier to complete.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Temu-Style Buyer Protection Guarantee Card -->
+                <div style="margin-top: 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 10px; display: flex; gap: 8px; align-items: flex-start;">
+                  <span style="font-size: 1.1rem;">🛡️</span>
+                  <div>
+                    <div style="font-size: 0.72rem; font-weight: 800; color: #991B1B;">RushPoint 100% Escrow Guarantee</div>
+                    <div style="font-size: 0.64rem; color: #B91C1C; margin-top: 2px;">If items are missing or damaged, or if delivery is significantly delayed, your payment is refunded instantly into your wallet.</div>
+                  </div>
+                </div>
+
+                <!-- WhatsApp Official Receipt & Tracking Share -->
+                <div style="margin-top: 10px;">
+                  <a href="${MobileApp.generateWhatsAppReceiptUrl(o)}" target="_blank" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border-radius: 10px; padding: 9px; font-size: 0.75rem; font-weight: 800; color: #059669; border-color: #A7F3D0; background: #ECFDF5; text-decoration: none;">
+                    📲 Save / Share Receipt on WhatsApp
+                  </a>
+                </div>
+
+                <!-- 2-Hour Return / Dispute Resolution Window -->
+                ${o.status === 'DELIVERED' ? `
+                  ${o.dispute_status ? `
+                    <div style="margin-top: 10px; background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 10px; padding: 10px;">
+                      <div style="font-size: 0.75rem; font-weight: 800; color: #92400E;">⚠️ Dispute Raised (${o.dispute_status})</div>
+                      <div style="font-size: 0.68rem; color: #78350F; margin-top: 2px;">${o.dispute_reason || 'Escrow payment frozen pending admin support review.'}</div>
+                    </div>
+                  ` : `
+                    <div style="margin-top: 10px;">
+                      <button onclick="MobileApp.showOrderDisputeModal('${o.id}', '${o.order_ref}')" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border-radius: 10px; padding: 9px; font-size: 0.75rem; font-weight: 800; color: #DC2626; border-color: #FECACA; background: #FFF5F5; cursor: pointer;">
+                        ⚠️ Report Damaged / Missing Item (2-Hour Window)
+                      </button>
+                    </div>
+                  `}
+                ` : ''}
+              </div>
+            ` : `
+              <!-- Rider & Admin View: Live GPS Radar Map + 1-Tap Google Maps Navigation -->
+              <div style="margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-bottom: 6px;">
+                  <span style="font-weight: 800; color: #1E293B;">🗺️ Courier Radar & Route Map</span>
+                  <a href="https://www.google.com/maps/dir/?api=1&origin=${o.store_lat || 12.9908},${o.store_lng || 7.6018}&destination=${o.delivery_lat || 12.9820},${o.delivery_lng || 7.5950}&travelmode=driving" target="_blank" rel="noopener" style="background: #EFF6FF; border: 1px solid #93C5FD; color: #1D4ED8; font-weight: 800; padding: 2px 8px; border-radius: 6px; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                    🗺️ Turn-by-Turn Google Maps
+                  </a>
+                </div>
+                <div id="order-radar-map" style="height: 180px; border-radius: 12px; border: 1px solid #CBD5E1; overflow: hidden; background: #E2E8F0;"></div>
+              </div>
+            `}
+
+            <!-- Milestone Activity Log -->
+            <div style="font-weight: 800; font-size: 0.78rem; margin-bottom: 8px; color: #1E293B;">Activity Log</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #FECACA; padding-left: 12px; margin-left: 6px; max-height: 150px; overflow-y: auto;">
+              ${timeline.map(t => {
+                const isComp = t.actor_role === 'Auto-Compensation Engine';
+                if (isComp) {
+                  return `
+                    <div style="background: linear-gradient(135deg, #ECFDF5, #D1FAE5); border: 1.5px solid #6EE7B7; border-radius: 10px; padding: 8px 12px; margin-bottom: 2px;">
+                      <div style="font-size: 0.72rem; font-weight: 900; color: #065F46;">🎁 Late Delivery Compensation Credited!</div>
+                      <div style="font-size: 0.66rem; color: #047857; margin-top: 2px;">${t.notes || ''}</div>
+                      <div style="font-size: 0.60rem; color: #6B7280; margin-top: 3px;">${new Date(t.timestamp).toLocaleString()}</div>
+                    </div>
+                  `;
+                }
+                return `
+                  <div style="font-size: 0.7rem;">
+                    <span style="font-weight: 800; color: #B91C1C;">${t.to_status}</span>
+                    <div style="font-size: 0.64rem; color: #94A3B8;">${new Date(t.timestamp).toLocaleTimeString()} by ${t.actor_role}</div>
+                    ${t.notes ? `<div style="font-size: 0.64rem; color: #64748B;">${t.notes}</div>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
       `;
       document.body.appendChild(modal);
+
+      if (!isCustomer) {
+        setTimeout(() => {
+          const mapEl = document.getElementById('order-radar-map');
+          if (!mapEl || typeof L === 'undefined') return;
+
+          const storeLat = o.store_lat || 12.9908;
+          const storeLng = o.store_lng || 7.6018;
+          const destLat = o.delivery_lat || 12.9820;
+          const destLng = o.delivery_lng || 7.5950;
+
+          let riderLat = storeLat;
+          let riderLng = storeLng;
+          const sUpper = (o.status || '').toUpperCase();
+          if (sUpper === 'IN_TRANSIT' || sUpper === 'PICKED_UP') {
+            riderLat = (storeLat + destLat) / 2 + 0.0015;
+            riderLng = (storeLng + destLng) / 2 + 0.0015;
+          } else if (sUpper === 'DELIVERED') {
+            riderLat = destLat;
+            riderLng = destLng;
+          }
+
+          const map = L.map('order-radar-map', { zoomControl: false, attributionControl: false }).setView([(storeLat + destLat)/2, (storeLng + destLng)/2], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+          const storeIcon = L.divIcon({
+            html: '<div style="background:#7F1D1D;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏪</div>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
+          });
+          L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map).bindPopup(`<b>${o.store_name}</b><br>Store Pickup`);
+
+          const custIcon = L.divIcon({
+            html: '<div style="background:#059669;color:#FFF;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #FFF;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🏠</div>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
+          });
+          L.marker([destLat, destLng], { icon: custIcon }).addTo(map).bindPopup(`<b>Destination</b><br>${o.delivery_address}`);
+
+          if (sUpper !== 'PENDING' && sUpper !== 'CANCELLED') {
+            const bikeIcon = L.divIcon({
+              html: '<div style="background:#F59E0B;color:#000;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #FFF;box-shadow:0 0 10px rgba(245,158,11,0.8);">🛵</div>',
+              iconSize: [28, 28], iconAnchor: [14, 14]
+            });
+            L.marker([riderLat, riderLng], { icon: bikeIcon }).addTo(map).bindPopup(`<b>${o.rider_name || 'Assigned Courier'}</b><br>Live GPS Radar`);
+          }
+
+          L.polyline([[storeLat, storeLng], [riderLat, riderLng], [destLat, destLng]], {
+            color: '#B91C1C', weight: 3, dashArray: '4, 6', opacity: 0.85
+          }).addTo(map);
+
+          try {
+            map.fitBounds([[storeLat, storeLng], [destLat, destLng]], { padding: [20, 20] });
+          } catch(e){}
+        }, 150);
+      }
     } catch (e) {}
   },
 
@@ -1558,28 +2050,7 @@ const MobileApp = {
     } catch (e) {}
   },
 
-  showTopUpModal(currentBal) {
-    const modal = document.createElement("div");
-    modal.className = "modal-backdrop rp-modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 320px; border-radius: 20px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">💳 Top Up Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
-        </div>
-        <div style="font-size: 0.78rem; margin-bottom: 12px;">Current Balance: <strong style="color: #B91C1C;">₦${currentBal.toLocaleString()}</strong></div>
-        <div class="rp-form-group">
-          <label class="rp-label">Deposit Amount (NGN)</label>
-          <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" step="500" style="border-radius: 10px;">
-        </div>
-        <div style="font-size: 0.72rem; color: #64748B; margin-bottom: 12px;">🔒 Real live payment powered by Flutterwave (Debit Card, Bank Transfer, USSD).</div>
-        <button onclick="MobileApp.executeTopUp()" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px; border-radius: 12px; background: #B91C1C; font-weight: 800;">
-          Pay with Flutterwave 💳
-        </button>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  },
+
 
   async executeTopUp() {
     const amt = parseFloat(document.getElementById("topup-amount").value);
@@ -1636,6 +2107,10 @@ const MobileApp = {
     const completedOrders = orders.filter(o => o.status === 'DELIVERED');
     const inTransitOrders = orders.filter(o => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'].includes(o.status));
     const activeOrders = orders.filter(o => ['NEW', 'CONFIRMED'].includes(o.status));
+    const lowStockProducts = products.filter(p => (p.stock_qty || 0) <= 5);
+
+    // Start background polling so the phone rings on new orders (zero cost — browser only)
+    this.startVendorOrderPolling();
 
     container.innerHTML = `
       <div class="mobile-app-shell">
@@ -1653,9 +2128,19 @@ const MobileApp = {
               <div style="font-size: 0.65rem; opacity: 0.88; color: #FEE2E2;">🏪 ${vendor?.business_name || 'Store'} • 📍 ${store?.address || 'Katsina / Lagos'}</div>
             </div>
           </div>
-          <button onclick="MobileApp.showRoleSwitchModal()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
-            Switch
-          </button>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            ${lowStockProducts.length > 0 ? `
+              <button onclick="MobileApp.vendorActiveTab = 'products'; MobileApp.render();" style="background: #FEF3C7; border: 1.5px solid #F59E0B; color: #B45309; padding: 5px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="${lowStockProducts.length} product(s) have 5 or fewer items remaining!">
+                ⚠️ Stock (${lowStockProducts.length})
+              </button>
+            ` : ''}
+            <button onclick="MobileApp.testAndUnlockVendorAudio()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;" title="Test and prime device speaker so it rings loudly on orders">
+              🔔 Sound Test
+            </button>
+            <button onclick="MobileApp.showRoleSwitchModal()" style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.25); color: #FFF; padding: 5px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 700; cursor: pointer;">
+              Switch
+            </button>
+          </div>
         </div>
 
         <div class="mobile-content-area">
@@ -1743,6 +2228,10 @@ const MobileApp = {
               <div class="mobile-drawer-item ${this.vendorActiveTab === 'account' ? 'active' : ''}" onclick="MobileApp.toggleVendorDrawer(false); MobileApp.vendorActiveTab = 'account'; MobileApp.render();">
                 <span class="mobile-drawer-icon">🏦</span> <span>Bank Settlement Profile</span>
               </div>
+              <div class="mobile-drawer-item" onclick="MobileApp.toggleVendorDrawer(false); MobileApp.showStoreQrFlyerModal();">
+                <span class="mobile-drawer-icon">🖨️</span> <span>Print Store QR Standee</span>
+                <span class="badge" style="background:#059669;color:#FFF;font-size:0.55rem;margin-left:auto;padding:1px 6px;">Flyer</span>
+              </div>
 
               <div class="mobile-drawer-section-title">Security & Controls</div>
               <div class="mobile-drawer-item" onclick="MobileApp.toggleVendorDrawer(false); MobileApp.showChangePasswordModal();">
@@ -1780,8 +2269,16 @@ const MobileApp = {
       return `
         <!-- Top Branded RushPoint Bar -->
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 2px 4px;">
-          <img src="img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src=(window.API?window.API.baseUrl:'')+'/static/img/rushpoint-logo-transparent.png'" style="height: 38px; object-fit: contain; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.1));" alt="RushPoint Logistics">
-          <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant Storefront</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="height: 38px; width: 38px; border-radius: 10px; object-fit: contain; background: #FFFFFF; padding: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);" alt="RushPoint">
+            <span style="font-weight:900;font-size:1.05rem;color:#881337;">Rush<span style="color:#BE123C;">Point</span></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button onclick="MobileApp.toggleStoreOpenStatus()" style="display: flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 800; color: ${MobileApp.isStoreClosed ? '#DC2626' : '#15803D'}; background: ${MobileApp.isStoreClosed ? '#FEF2F2' : '#DCFCE7'}; border: 1px solid ${MobileApp.isStoreClosed ? '#FCA5A5' : '#86EFAC'}; padding: 3px 8px; border-radius: 10px; cursor: pointer;">
+              ${MobileApp.isStoreClosed ? '🔴 Store Paused' : '🟢 Open for Orders'}
+            </button>
+            <div style="font-size: 0.68rem; font-weight: 800; color: #7F1D1D; background: #FEF2F2; padding: 3px 8px; border-radius: 10px;">🏪 Merchant</div>
+          </div>
         </div>
 
         <!-- Commercial Sequence Header -->
@@ -1831,6 +2328,24 @@ const MobileApp = {
             <div style="font-size: 1.25rem; font-weight: 900; color: #7C3AED; margin-top: 2px;">${products.length}</div>
           </div>
         </div>
+
+        <!-- Low-Stock Alert Banner -->
+        ${products.filter(p => (p.stock_qty || 0) <= 5).length > 0 ? `
+          <div style="background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.3rem;">⚠️</span>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 800; color: #92400E;">
+                  Low-Stock Warning: ${products.filter(p => (p.stock_qty || 0) <= 5).length} item(s) low!
+                </div>
+                <div style="font-size: 0.68rem; color: #78350F;">Items have 5 or fewer units left. Restock now to prevent missed orders.</div>
+              </div>
+            </div>
+            <button onclick="MobileApp.vendorActiveTab = 'products'; MobileApp.render();" class="btn-primary btn-sm" style="background: #D97706; font-size: 0.68rem; font-weight: 800; white-space: nowrap; padding: 6px 10px; border-radius: 8px;">
+              Restock 📦
+            </button>
+          </div>
+        ` : ''}
 
         <!-- 1. Orders Requiring Preparation -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -1889,7 +2404,7 @@ const MobileApp = {
                 <span>${o.order_ref}</span>
                 <span class="badge badge-${o.status.toLowerCase()}">${o.status}</span>
               </div>
-              <div style="font-size: 0.72rem; color: #64748B; margin: 4px 0;">Customer: ${o.customer_name} • ${o.customer_phone || ''}</div>
+              <div style="font-size: 0.72rem; color: #64748B; margin: 4px 0;">Customer: <strong>${o.customer_name}</strong> • <span style="color: #059669; font-weight: 700;">🔒 Contact Protected (Dispatch Coordinates)</span></div>
               <div style="font-size: 0.75rem; color: #B91C1C; font-weight: 800;">Amount: ₦${o.total_amount.toLocaleString()}</div>
               
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
@@ -1962,8 +2477,10 @@ const MobileApp = {
           </div>
 
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            ${products.map(p => `
-              <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+            ${products.map(p => {
+              const isLow = (p.stock_qty || 0) <= 5;
+              return `
+              <div style="background: ${isLow ? '#FFFDF5' : '#FFF'}; border: 1.5px solid ${isLow ? '#FCD34D' : '#E2E8F0'}; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="checkbox" class="vnd-prod-cb" value="${p.id}" onchange="MobileApp.updateVendorSelectionBar()">
@@ -1977,23 +2494,31 @@ const MobileApp = {
                       </div>
                     </div>
                   </div>
-                  <span class="badge badge-${p.status.toLowerCase()}" style="font-size: 0.58rem;">${p.status}</span>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="badge badge-${p.status.toLowerCase()}" style="font-size: 0.58rem;">${p.status}</span>
+                    ${isLow ? `<span class="badge" style="background: #FEF3C7; color: #92400E; font-size: 0.58rem; font-weight: 800; border: 1px solid #FCD34D;">⚠️ Low (${p.stock_qty})</span>` : ''}
+                  </div>
                 </div>
 
                 <!-- Stock & Actions Row -->
                 <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F1F5F9; padding-top: 8px;">
                   <div style="font-size: 0.72rem; color: #64748B;">
-                    Stock: <strong style="color: ${p.stock_qty > 0 ? '#1E293B' : 'red'}; font-size: 0.82rem;">${p.stock_qty}</strong>
+                    Stock: <strong style="color: ${p.stock_qty > 5 ? '#1E293B' : (p.stock_qty > 0 ? '#D97706' : 'red')}; font-size: 0.82rem;">${p.stock_qty}</strong>
                   </div>
-                  <div style="display: flex; gap: 4px;">
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <button onclick="MobileApp.toggleProductQuickStock('${p.id}', ${p.stock_qty > 0 ? 0 : 10})" class="btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; cursor: pointer; background: ${p.stock_qty > 0 ? '#DCFCE7' : '#FEF2F2'}; color: ${p.stock_qty > 0 ? '#15803D' : '#DC2626'}; border: 1px solid ${p.stock_qty > 0 ? '#86EFAC' : '#FCA5A5'};" title="Toggle active/out-of-stock">
+                      ${p.stock_qty > 0 ? 'Pause ✕' : 'Resume ✓'}
+                    </button>
                     <button onclick="MobileApp.quickUpdateStock('${p.id}', Math.max(0, ${p.stock_qty} - 1))" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;" title="Reduce 1 stock">-1</button>
-                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 5)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800;" title="Add 5 stock">+5</button>
+                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 5)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; ${isLow ? 'background:#FEF3C7;border-color:#FCD34D;' : ''}" title="Add 5 stock">+5</button>
+                    <button onclick="MobileApp.quickUpdateStock('${p.id}', ${p.stock_qty} + 10)" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px; font-weight: 800; ${isLow ? 'background:#DCFCE7;border-color:#86EFAC;' : ''}" title="Add 10 stock">+10</button>
                     <button onclick="MobileApp.showVendorEditProductModal('${p.id}')" class="btn-secondary btn-sm" style="font-size: 0.65rem; padding: 2px 8px; border-radius: 6px; font-weight: 700;">✏️ Edit</button>
                     <button onclick="MobileApp.deleteVendorProduct('${p.id}', '${p.name.replace(/'/g, "\\'")}')" class="btn-danger btn-sm" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 6px;">🗑️</button>
                   </div>
                 </div>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
         </div>
       `;
@@ -2514,15 +3039,33 @@ const MobileApp = {
     let profile = null;
     let wallet = { balance: 0.0 };
 
+    let earningsData = null;
     try {
       const res = await API.get("/api/riders/profile", { silent: true });
       if (res) profile = res;
       const wRes = await API.get("/api/finance/wallet/me", { silent: true });
       if (wRes && wRes.wallet) wallet = wRes.wallet;
+      const eaRes = await API.get("/api/riders/earnings-analytics", { silent: true });
+      if (eaRes && eaRes.success) earningsData = eaRes;
     } catch (e) {}
 
     const rider = profile?.rider;
-    const activeOrder = profile?.active_order;
+    let activeOrder = profile?.active_order;
+
+    // Offline Local Storage Mission Caching for Low-Bandwidth Markets
+    if (activeOrder) {
+      try {
+        localStorage.setItem('rp_cached_mission', JSON.stringify(activeOrder));
+      } catch (e) {}
+    } else if (!activeOrder) {
+      try {
+        const cached = localStorage.getItem('rp_cached_mission');
+        if (cached) {
+          activeOrder = JSON.parse(cached);
+          activeOrder._is_offline_cached = true;
+        }
+      } catch (e) {}
+    }
 
     // Start Native Device Phone GPS Tracking if Rider is Online
     if (rider?.operational_status === 'AVAILABLE') {
@@ -2570,8 +3113,15 @@ const MobileApp = {
           </button>
         </div>
 
+        ${activeOrder?._is_offline_cached ? `
+          <div style="background: #FEF3C7; border-bottom: 1.5px solid #FCD34D; color: #92400E; padding: 6px 12px; font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>📶</span>
+            <span>Offline Mode Active: Showing saved mission details. You can drop off even with low network!</span>
+          </div>
+        ` : ''}
+
         <div class="mobile-content-area">
-          ${this.getRiderTabHtml(activeOrder, rider, wallet, user)}
+          ${this.getRiderTabHtml(activeOrder, rider, wallet, user, earningsData)}
         </div>
 
         <!-- Rider 3-Tab Bottom Navigation -->
@@ -2752,14 +3302,16 @@ const MobileApp = {
     }
   },
 
-  getRiderTabHtml(activeOrder, rider, wallet, user) {
+  getRiderTabHtml(activeOrder, rider, wallet, user, earningsData = null) {
     if (this.riderActiveTab === "mission") {
       return `
         <!-- Rider Earnings Card — Darklight Blood / Maroon Theme -->
         <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">🛵 Completed Trip Earnings</span>
-            <span style="background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); color: #FFF; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 800;">${rider?.rider_type === 'INTERNAL' ? '🏢 Internal Fleet' : '🤝 Partner (Commission)'}</span>
+            <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">🛵 Trip Earnings (80% Commission)</span>
+            <button onclick="MobileApp.toggleRiderOnlineStatus()" style="background: ${MobileApp.isRiderOnline ? '#22C55E' : '#94A3B8'}; color: #FFF; border: none; padding: 3px 9px; border-radius: 12px; font-size: 0.68rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              ${MobileApp.isRiderOnline ? '🟢 Online & Ready' : '⚪ Off-Duty'}
+            </button>
           </div>
           <div style="font-size: 1.65rem; font-weight: 900; margin: 4px 0 8px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
             ₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
@@ -2781,7 +3333,19 @@ const MobileApp = {
             </div>
             
             <div style="font-size: 0.75rem; margin-bottom: 4px;">🏪 Pickup: <strong>${activeOrder.store_name}</strong> (${activeOrder.store_address})</div>
-            <div style="font-size: 0.75rem; margin-bottom: 12px;">📍 Dropoff: <strong>${activeOrder.delivery_address}</strong></div>
+            <div style="font-size: 0.75rem; margin-bottom: 8px;">📍 Dropoff: <strong>${activeOrder.delivery_address}</strong></div>
+
+            <!-- 1-Tap Google Maps Navigation & Customer Contact -->
+            <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activeOrder.delivery_address)}" target="_blank" rel="noopener" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; background: #EFF6FF; border: 1px solid #93C5FD; color: #1D4ED8; padding: 8px 10px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; text-decoration: none;">
+                🗺️ Google Maps Navigation
+              </a>
+              ${activeOrder.customer_phone ? `
+                <a href="tel:${activeOrder.customer_phone}" style="display: flex; align-items: center; justify-content: center; gap: 4px; background: #ECFDF5; border: 1px solid #A7F3D0; color: #059669; padding: 8px 10px; border-radius: 10px; font-size: 0.72rem; font-weight: 800; text-decoration: none;">
+                  📞 Call
+                </a>
+              ` : ''}
+            </div>
 
             <!-- Mission Action Steps -->
             ${activeOrder.status === 'ASSIGNED' ? `
@@ -2819,28 +3383,134 @@ const MobileApp = {
     }
 
     if (this.riderActiveTab === "earnings") {
+      const isExternal = earningsData ? earningsData.is_external : (rider?.rider_type !== 'INTERNAL');
+      const todayEarnings = earningsData?.today_earnings || 0;
+      const weeklyEarnings = earningsData?.weekly_earnings || 0;
+      const totalDeliveries = earningsData?.total_deliveries || rider?.total_deliveries || 0;
+      const rating = earningsData?.rating || rider?.rating || 5.0;
+      const dailyBreakdown = earningsData?.daily_breakdown || [];
+      const recentTrips = earningsData?.recent_trips || [];
+
+      // Find max daily earning for CSS bar scaling
+      const maxDaily = Math.max(...dailyBreakdown.map(d => d.earnings), 1000);
+
       return `
         <div>
-          <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B; margin-bottom: 12px;">💰 Rider Earnings & Wallet</div>
-          
-          <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2);">
-            <div style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">Available Balance</div>
-            <div style="font-size: 1.65rem; font-weight: 900; margin: 4px 0 10px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="font-size: 0.95rem; font-weight: 800; color: #1E293B;">💰 Courier Earnings & Performance</div>
+            <span class="badge" style="background: ${isExternal ? '#2563EB' : '#059669'}; color: #FFF; font-size: 0.62rem; font-weight: 800;">
+              ${isExternal ? '🤝 EXTERNAL PARTNER' : '🏢 COMPANY FLEET'}
+            </span>
+          </div>
+
+          <!-- Primary Wallet Balance Card -->
+          <div class="blood-wallet-card" style="background: linear-gradient(135deg, #2b0008 0%, #4a0011 35%, #70001a 75%, #990024 100%); border: 1px solid rgba(255, 59, 86, 0.4); box-shadow: 0 12px 28px -6px rgba(128, 0, 32, 0.5), 0 0 15px rgba(255, 59, 86, 0.2); margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.72rem; font-weight: 700; opacity: 0.9; text-transform: uppercase; color: #FEE2E2;">Available Balance</span>
+              <span style="background: rgba(255,255,255,0.18); color: #FFF; font-size: 0.62rem; padding: 2px 8px; border-radius: 10px; font-weight: 800;">Escrow Cleared</span>
+            </div>
+            <div style="font-size: 1.85rem; font-weight: 900; margin: 4px 0 10px; color: #FFF; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">
               ₦${wallet.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
             </div>
-            <button onclick="MobileApp.showWithdrawalModal(${wallet.balance}, 'Access Bank', '0691128394', '${user.full_name}')" style="background: #FFF; color: #7F1D1D; border: none; width: 100%; padding: 9px; border-radius: 10px; font-weight: 900; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
-              💳 Withdraw Earnings to Bank
+            <button onclick="MobileApp.showWithdrawalModal(${wallet.balance}, 'Access Bank', '0691128394', '${user.full_name}')" style="background: #FFF; color: #7F1D1D; border: none; width: 100%; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.2);">
+              💳 Withdraw Earnings to Bank Account
             </button>
           </div>
 
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px;">
-            <div style="font-weight: 800; font-size: 0.82rem; color: #1E293B; margin-bottom: 6px;">Commission Model</div>
-            <div style="font-size: 0.75rem; color: #64748B;">
-              ${rider?.rider_type === 'INTERNAL' ? 
-                '🏢 <strong>Internal Company Fleet</strong>: Transport fee retained for company asset operations.' : 
-                '🤝 <strong>External Partner</strong>: You receive your configured % commission split automatically on every verified delivery.'}
+          ${isExternal ? `
+            <!-- Performance KPI Cards (External Partner) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Today's Payouts</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #059669; margin-top: 2px;">₦${todayEarnings.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">${earningsData?.today_deliveries || 0} trips today</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">This Week (7 Days)</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #2563EB; margin-top: 2px;">₦${weeklyEarnings.toLocaleString()}</div>
+                <div style="font-size: 0.62rem; color: #64748B;">Cleared commissions</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Total Deliveries</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #1E293B; margin-top: 2px;">${totalDeliveries}</div>
+                <div style="font-size: 0.62rem; color: #059669; font-weight: 700;">Completed trips</div>
+              </div>
+              <div class="monie-stat-card" style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px;">
+                <div style="font-size: 0.68rem; font-weight: 700; color: #64748B;">Customer Rating</div>
+                <div style="font-size: 1.25rem; font-weight: 900; color: #D97706; margin-top: 2px;">⭐ ${rating.toFixed(1)}</div>
+                <div style="font-size: 0.62rem; color: #D97706; font-weight: 700;">Top Courier Tier</div>
+              </div>
             </div>
-          </div>
+
+            <!-- 7-Day Visual Earnings Bar Chart (Pure CSS) -->
+            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px; margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B;">📊 Past 7 Days Earnings Trend</div>
+                <span style="font-size: 0.68rem; color: #059669; font-weight: 800;">Week: ₦${weeklyEarnings.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 90px; padding: 0 4px; border-bottom: 1px solid #F1F5F9; margin-bottom: 6px;">
+                ${dailyBreakdown.map(d => {
+                  const pct = Math.max(8, Math.round((d.earnings / maxDaily) * 100));
+                  return `
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+                      <span style="font-size: 0.55rem; color: #64748B; font-weight: 700;">${d.earnings > 0 ? `₦${Math.round(d.earnings / 1000)}k` : ''}</span>
+                      <div style="width: 18px; height: ${pct}%; background: ${d.earnings > 0 ? 'linear-gradient(180deg, #2563EB, #60A5FA)' : '#E2E8F0'}; border-radius: 4px 4px 0 0;" title="${d.date}: ₦${d.earnings.toLocaleString()} (${d.deliveries} trips)"></div>
+                      <span style="font-size: 0.62rem; font-weight: 700; color: #475569;">${d.day}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- Recent Delivery Trips Breakdown -->
+            <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 14px; margin-bottom: 14px;">
+              <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 10px;">🛵 Recent Delivery Payouts</div>
+              ${recentTrips.length === 0 ? `
+                <div style="font-size: 0.72rem; color: #64748B; text-align: center; padding: 10px;">
+                  No completed delivery trips recorded yet. Stay online to receive missions!
+                </div>
+              ` : `
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${recentTrips.slice(0, 5).map(t => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F1F5F9; padding-bottom: 6px;">
+                      <div>
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #1E293B;">${t.order_ref}</div>
+                        <div style="font-size: 0.65rem; color: #64748B;">🏪 ${t.store_name} • ${new Date(t.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                      </div>
+                      <div style="text-align: right;">
+                        <div style="font-size: 0.82rem; font-weight: 900; color: #059669;">+₦${(t.rider_earnings || t.delivery_fee * 0.8 || 800).toLocaleString()}</div>
+                        <div style="font-size: 0.6rem; color: #64748B;">80% Commission</div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          ` : `
+            <!-- Internal Company Salaried Fleet Courier Notice -->
+            <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 16px; padding: 16px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 1.4rem;">🏢</span>
+                <div>
+                  <div style="font-weight: 900; font-size: 0.88rem; color: #166534;">RushPoint Corporate Fleet Courier</div>
+                  <div style="font-size: 0.68rem; color: #15803D;">Fixed Salaried Staff • Katsina Logistics Operations Hub</div>
+                </div>
+              </div>
+              <div style="font-size: 0.74rem; color: #166534; line-height: 1.4; margin-bottom: 12px;">
+                As an internal company courier, you are on <strong>guaranteed monthly company payroll</strong>. Individual trip delivery fees are collected directly by RushPoint to cover corporate fleet fueling, maintenance, insurance, and company motorcycle servicing.
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                  <div style="font-size: 0.65rem; color: #64748B;">Deliveries Completed</div>
+                  <div style="font-size: 1.15rem; font-weight: 900; color: #166534;">${totalDeliveries}</div>
+                </div>
+                <div style="background: #FFF; border: 1px solid #BBF7D0; border-radius: 10px; padding: 10px;">
+                  <div style="font-size: 0.65rem; color: #64748B;">Fleet Star Rating</div>
+                  <div style="font-size: 1.15rem; font-weight: 900; color: #D97706;">⭐ ${rating.toFixed(1)}</div>
+                </div>
+              </div>
+            </div>
+          `}
         </div>
       `;
     }
@@ -2875,63 +3545,329 @@ const MobileApp = {
     }
   },
 
-  async showTopUpModal(currentBalance) {
-    let dedicatedAcc = null;
+  async getBanksList() {
+    if (this._cachedBanks && this._cachedBanks.length > 0) return this._cachedBanks;
     try {
-      const wRes = await API.get("/api/finance/wallet/dedicated-account");
-      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
+      const res = await API.get("/api/finance/banks");
+      if (res && res.banks) {
+        this._cachedBanks = res.banks;
+        return this._cachedBanks;
+      }
+    } catch (e) {}
+    return [
+      { code: "999992", name: "OPay (PayCom)", icon: "🔴", popular: true },
+      { code: "999991", name: "PalmPay", icon: "🌴", popular: true },
+      { code: "50515", name: "Moniepoint MFB", icon: "🔵", popular: true },
+      { code: "50211", name: "Kuda Bank", icon: "🟣", popular: true },
+      { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧", popular: true },
+      { code: "057", name: "Zenith Bank", icon: "🔴", popular: true },
+      { code: "044", name: "Access Bank", icon: "🔶", popular: true },
+      { code: "011", name: "First Bank of Nigeria", icon: "🐘", popular: true },
+      { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴", popular: true }
+    ];
+  },
+
+  async showTopUpModal(currentBalance) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.id = "topup-main-modal";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 390px; border-radius: 22px; overflow: hidden; padding: 0;">
+        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">💰 Fund Your Wallet</h3>
+            <div style="font-size: 0.68rem; opacity: 0.85; margin-top: 2px;">Secure payments via Flutterwave</div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 32px; height: 32px; color: #FFF; font-size: 1.2rem; cursor: pointer; display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+
+        <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto; background:#FAFAFA;">
+
+          <!-- Current Balance -->
+          <div style="background: #FFF; border: 1.5px solid #FECACA; border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+            <div>
+              <div style="font-size: 0.68rem; color: #64748B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Current Balance</div>
+              <div style="font-size: 1.5rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            </div>
+            <div style="font-size: 2rem;">💳</div>
+          </div>
+
+          <!-- Step 1: Amount Input -->
+          <div style="background: #FFF; border: 1.5px solid #E2E8F0; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+            <div style="font-size: 0.82rem; font-weight: 900; color: #1E293B; margin-bottom: 10px;">Enter Amount to Add:</div>
+            <div style="position: relative; margin-bottom: 10px;">
+              <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: #64748B; font-weight: 700;">₦</span>
+              <input type="number" id="topup-amount-input" min="100" step="100" placeholder="e.g. 5000"
+                style="width: 100%; padding: 12px 12px 12px 28px; border: 1.5px solid #CBD5E1; border-radius: 10px; font-size: 1.05rem; font-weight: 800; color: #0F172A; box-sizing: border-box; outline: none;"
+                onfocus="this.style.borderColor='#B91C1C'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+            <!-- Quick amount buttons -->
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+              ${[500, 1000, 2000, 5000, 10000, 20000].map(v => `
+                <button type="button" onclick="document.getElementById('topup-amount-input').value=${v}"
+                  style="flex: 1; min-width: 50px; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 7px 4px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; color: #334155;">
+                  ₦${v >= 1000 ? (v/1000)+'k' : v}
+                </button>`).join('')}
+            </div>
+
+            <!-- PAY BUTTON — Opens Real Flutterwave Checkout -->
+            <button id="btn-generate-topup-link" onclick="MobileApp.openFlutterwaveTopup()"
+              style="width: 100%; padding: 14px; border: none; border-radius: 12px; background: linear-gradient(135deg, #B91C1C, #DC2626); color: #FFF; font-size: 0.92rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(185,28,28,0.35);">
+              <span>🔐</span> Continue to Secure Payment
+            </button>
+          </div>
+
+          <!-- Payment Methods Badge -->
+          <div style="background: #FFF; border: 1.5px solid #E2E8F0; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px;">
+            <div style="font-size: 0.72rem; font-weight: 800; color: #475569; margin-bottom: 8px;">Accepted Payment Methods:</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <span style="background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">🏦 Bank Transfer</span>
+              <span style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">💳 Debit Card</span>
+              <span style="background: #FFF7ED; color: #C2410C; border: 1px solid #FED7AA; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">📱 USSD</span>
+              <span style="background: #F0FDF4; color: #166534; border: 1px solid #86EFAC; padding: 4px 10px; border-radius: 8px; font-size: 0.68rem; font-weight: 800;">🔴 OPay</span>
+            </div>
+          </div>
+
+          <!-- Info Box -->
+          <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 10px 12px; font-size: 0.68rem; color: #92400E; line-height: 1.5;">
+            ⚡ <strong>How it works:</strong> Click "Continue to Secure Payment" → Flutterwave secure checkout opens → Choose <strong>Bank Transfer</strong> for a real active account (transfers clear in seconds), or pay by <strong>Card or USSD</strong> → Your wallet is credited instantly after payment.
+          </div>
+
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async openFlutterwaveTopup() {
+    const amountInput = document.getElementById("topup-amount-input");
+    const amount = parseFloat(amountInput ? amountInput.value : 0);
+    if (!amount || amount < 100) {
+      API.showToast("Please enter a minimum amount of ₦100", "error");
+      return;
+    }
+
+    const btn = document.getElementById("btn-generate-topup-link");
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳</span> Connecting to Flutterwave…`;
+      btn.style.background = "#6B7280";
+    }
+
+    try {
+      const res = await API.post("/api/finance/wallet/generate-payment-link", {
+        amount,
+        redirect_url: window.location.origin + "/app"
+      });
+
+      if (res && res.success && res.payment_link) {
+        // Store the tx_ref in sessionStorage so we can verify when user comes back
+        sessionStorage.setItem("rp_pending_topup_ref", res.reference);
+        sessionStorage.setItem("rp_pending_topup_amount", amount.toString());
+
+        // Close modal and navigate to Flutterwave
+        document.getElementById("topup-main-modal")?.remove();
+        API.showToast("🔐 Redirecting to secure Flutterwave checkout…", "info");
+        setTimeout(() => { window.location.href = res.payment_link; }, 600);
+      } else {
+        throw new Error(res?.message || "Could not get payment link");
+      }
+    } catch (err) {
+      const msg = err?.message || "Failed to connect to payment gateway";
+      API.showToast(`❌ ${msg}`, "error");
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🔐</span> Continue to Secure Payment`;
+        btn.style.background = "linear-gradient(135deg, #B91C1C, #DC2626)";
+      }
+    }
+  },
+
+  async checkAndProcessTopupReturn() {
+    // Called on app init to auto-verify if user just returned from Flutterwave
+    const urlParams = new URLSearchParams(window.location.search);
+    const topupRef = urlParams.get("topup_ref") || sessionStorage.getItem("rp_pending_topup_ref");
+    const flwStatus = urlParams.get("status");
+
+    if (!topupRef) return;
+
+    // Clean up URL and sessionStorage
+    sessionStorage.removeItem("rp_pending_topup_ref");
+    sessionStorage.removeItem("rp_pending_topup_amount");
+
+    // Remove query params from URL without reload
+    try {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
     } catch(e) {}
 
-    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank (Flutterwave)";
-    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
+    // Only verify if Flutterwave shows successful or if we have a reference to check
+    if (flwStatus && flwStatus !== "successful" && flwStatus !== "completed") {
+      if (flwStatus === "cancelled") {
+        API.showToast("Payment was cancelled. Your wallet was not charged.", "info");
+      } else {
+        API.showToast(`Payment status: ${flwStatus}. If you were charged, tap 'Verify Payment' in your wallet.`, "warning");
+      }
+      return;
+    }
 
+    // Show a loading toast while we verify
+    API.showToast("⏳ Verifying your payment…", "info");
+
+    try {
+      const res = await API.post("/api/finance/wallet/verify-and-credit", { tx_ref: topupRef });
+      if (res && res.success) {
+        if (res.status === "ALREADY_CREDITED") {
+          API.showToast(`✅ ${res.message}`, "success");
+        } else {
+          API.showToast(`🎉 ${res.message} New balance: ₦${(res.new_balance || 0).toLocaleString()}`, "success");
+        }
+        // Re-render to show updated balance
+        setTimeout(() => { this.render(); }, 800);
+      }
+    } catch (err) {
+      const errMsg = err?.message || "Could not verify payment";
+      // Show a manual verify option
+      API.showToast(`⚠️ ${errMsg}`, "error");
+    }
+  },
+
+
+
+  async onTransferAccountChanged() {
+    const accInput = document.getElementById("wdr-account-number");
+    const bankSelect = document.getElementById("wdr-bank-select");
+    const badge = document.getElementById("wdr-verified-badge");
+    const nameInput = document.getElementById("wdr-account-name");
+    const submitBtn = document.getElementById("wdr-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      if (submitBtn) submitBtn.disabled = (accNum.length < 10);
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Direct Instant Settlement</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Account verification pending. Please verify 10-digit number.`;
+    }
+  },
+
+  async showWithdrawalModal(currentBalance) {
+    const banks = await this.getBanksList();
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 370px; border-radius: 20px; overflow: hidden; padding: 0;">
-        <div style="background: linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%); color: #FFF; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 1.1rem; font-weight: 900; margin: 0;">💰 Fund RushPoint Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; color: #FFF; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 400px; border-radius: 24px; overflow: hidden; padding: 0;">
+        <!-- OPay Transfer Header -->
+        <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.4rem;">💸</span>
+              <div>
+                <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0; letter-spacing: -0.3px;">Transfer to Bank</h3>
+                <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay-Speed Instant NIBSS Settlement</div>
+              </div>
+            </div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 32px; height: 32px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="padding: 16px;">
-          <!-- Balance Display -->
-          <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.75rem; color: #64748B; font-weight: 700;">Current Balance</span>
-            <span style="font-size: 1.25rem; font-weight: 900; color: #991B1B;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+        <div style="padding: 20px; max-height: 82vh; overflow-y: auto;">
+          <!-- Balance Pill -->
+          <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 0.68rem; color: #166534; font-weight: 800; text-transform: uppercase;">Available Balance</div>
+              <div style="font-size: 1.35rem; font-weight: 900; color: #15803D;">₦${(currentBalance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+            </div>
+            <span class="badge" style="background: #059669; color: #FFF; font-size: 0.62rem; padding: 4px 8px; font-weight: 800;">FREE TRANSFER</span>
           </div>
 
-          <!-- 1. DEDICATED VIRTUAL ACCOUNT CARD -->
-          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.8rem; font-weight: 900; color: #166534;">🏦 Your Dedicated Account Number</span>
-              <span style="font-size: 0.6rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT CREDIT</span>
-            </div>
-            <div style="font-size: 0.68rem; color: #374151; margin-bottom: 8px;">Transfer from any bank app (OPay, Kuda, GTB, Zenith, PalmPay):</div>
-            
-            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="font-size: 0.68rem; color: #64748B; font-weight: 700;">${bankName}</div>
-                <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
-                <div style="font-size: 0.68rem; color: #166534; font-weight: 600;">${accName}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Virtual Account Copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-                📋 Copy
-              </button>
-            </div>
-          </div>
+          <form onsubmit="MobileApp.executeWithdrawal(event, ${currentBalance})">
+            <input type="hidden" id="wdr-account-name" value="">
 
-          <div style="text-align: center; color: #94A3B8; font-size: 0.72rem; font-weight: 700; margin-bottom: 10px;">— OR PAY WITH CARD / USSD —</div>
+            <!-- 1. Destination Bank -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">1. Select Destination Bank</label>
+              <select id="wdr-bank-select" class="rp-select" onchange="MobileApp.onTransferAccountChanged()" required style="border-radius: 12px; font-weight: 700; padding: 10px 12px; font-size: 0.88rem;">
+                <option value="">-- Choose Bank (OPay, PalmPay, Kuda, GTB...) --</option>
+                ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+              </select>
+            </div>
 
-          <!-- 2. FLUTTERWAVE GATEWAY -->
-          <form onsubmit="MobileApp.executeTopUp(event)">
+            <!-- 2. Account Number -->
             <div class="rp-form-group" style="margin-bottom: 10px;">
-              <label class="rp-label" style="font-size: 0.75rem;">Top Up Amount (NGN)</label>
-              <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" required style="border-radius: 10px;">
+              <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B;">2. 10-Digit NUBAN Account Number</label>
+              <input type="text" id="wdr-account-number" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="MobileApp.onTransferAccountChanged()" required style="border-radius: 12px; font-size: 1.15rem; font-weight: 800; letter-spacing: 1px; padding: 10px 12px;">
             </div>
-            <button type="submit" id="btn-submit-topup" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800; font-size: 0.88rem;">
-              Pay with Flutterwave (Card / USSD) 💳
+
+            <!-- Real-Time Verified Recipient Name Card -->
+            <div id="wdr-verified-badge" style="display: none; border-radius: 12px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 14px; font-size: 0.76rem;"></div>
+
+            <!-- 3. Amount -->
+            <div class="rp-form-group" style="margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="rp-label" style="font-size: 0.74rem; font-weight: 800; color: #1E293B; margin: 0;">3. Transfer Amount (NGN)</label>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=${currentBalance}; document.getElementById('wdr-summary-debit').innerText='₦'+Number(${currentBalance}).toLocaleString()" style="background: none; border: none; color: #059669; font-size: 0.72rem; font-weight: 800; cursor: pointer; text-decoration: underline;">Transfer All</button>
+              </div>
+              <input type="number" id="wdr-amount" class="rp-input" placeholder="Min ₦100" min="100" max="${currentBalance}" required value="${Math.min(currentBalance, 5000)}" oninput="document.getElementById('wdr-summary-debit').innerText = '₦' + Number(this.value || 0).toLocaleString()" style="border-radius: 12px; font-size: 1.1rem; font-weight: 800; padding: 10px 12px;">
+
+              <!-- Quick Amount Chips -->
+              <div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+                <button type="button" onclick="document.getElementById('wdr-amount').value=1000; document.getElementById('wdr-summary-debit').innerText='₦1,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦1k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=2000; document.getElementById('wdr-summary-debit').innerText='₦2,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦2k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=5000; document.getElementById('wdr-summary-debit').innerText='₦5,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦5k</button>
+                <button type="button" onclick="document.getElementById('wdr-amount').value=10000; document.getElementById('wdr-summary-debit').innerText='₦10,000'" style="flex:1; background: #F8FAFC; border: 1px solid #CBD5E1; padding: 5px 6px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">₦10k</button>
+              </div>
+            </div>
+
+            <!-- Fee & Total Summary -->
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.74rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #64748B;">
+                <span>Transfer Fee:</span>
+                <strong style="color: #059669;">₦0.00 (FREE)</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; border-top: 1px dashed #E2E8F0; padding-top: 6px; font-size: 0.84rem; font-weight: 900; color: #1E293B;">
+                <span>Total Debit:</span>
+                <span id="wdr-summary-debit" style="color: #059669;">₦${Math.min(currentBalance, 5000).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <button type="submit" id="wdr-submit-btn" class="btn-primary" style="width: 100%; justify-content: center; padding: 13px; border-radius: 14px; background: #059669; border-color: #047857; font-weight: 900; font-size: 0.92rem; box-shadow: 0 4px 12px rgba(5,150,105,0.3);">
+              Confirm & Send Transfer 🚀
             </button>
           </form>
         </div>
@@ -2940,83 +3876,103 @@ const MobileApp = {
     document.body.appendChild(modal);
   },
 
-  async executeTopUp(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    const amount = parseFloat(document.getElementById("topup-amount").value);
-    if (!amount || amount <= 0) {
-      API.showToast("Please enter a valid deposit amount", "error");
-      return;
-    }
-
-    const btn = document.getElementById("btn-submit-topup");
-    if (btn) { btn.disabled = true; btn.textContent = "Connecting Flutterwave Gateway… 🔐"; }
-
-    try {
-      const res = await API.post("/api/finance/payment/initialize", {
-        amount,
-        payment_type: "WALLET_TOPUP",
-        redirect_url: window.location.origin + "/app"
-      });
-      document.querySelector(".rp-modal-overlay")?.remove();
-      if (res.payment_link && res.gateway === "FLUTTERWAVE_LIVE") {
-        API.showToast("Redirecting to Flutterwave checkout…", "info");
-        window.location.href = res.payment_link;
-      } else {
-        API.showToast("Deposit reference generated: " + res.reference, "info");
-        this.render();
-      }
-    } catch (err) {
-      if (btn) { btn.disabled = false; btn.textContent = "Pay with Flutterwave 💳"; }
-    }
-  },
-
-  showWithdrawalModal(currentBalance, bankName, accNumber, accName) {
-    const modal = document.createElement("div");
-    modal.className = "modal-backdrop rp-modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 360px; border-radius: 20px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1.1rem; font-weight: 800; color: #1E293B;">💳 Withdraw Wallet Earnings</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
-        </div>
-
-        <div style="background: #FFF5F5; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 0.75rem;">
-          <div style="color: #64748B; margin-bottom: 4px;">Available Balance: <strong style="font-size: 1rem; color: #B91C1C;">₦${currentBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong></div>
-          <div style="border-top: 1px dashed #FECACA; padding-top: 6px; margin-top: 6px;">
-            <div>Bank: <strong>${bankName}</strong></div>
-            <div>Account: <code>${accNumber}</code> (${accName})</div>
-          </div>
-        </div>
-
-        <form onsubmit="MobileApp.executeWithdrawal(event, ${currentBalance})">
-          <div class="rp-form-group">
-            <label class="rp-label">Withdrawal Amount (NGN)</label>
-            <input type="number" id="wdr-amount" class="rp-input" placeholder="e.g. 10000" max="${currentBalance}" min="100" required value="${Math.min(currentBalance, 10000)}" style="border-radius: 10px;">
-          </div>
-          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; border-radius: 12px; background: #B91C1C; font-weight: 800;">
-            Confirm Bank Transfer 💸
-          </button>
-        </form>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  },
-
   async executeWithdrawal(e, currentBalance) {
     e.preventDefault();
     const amount = parseFloat(document.getElementById("wdr-amount").value);
+    const bankSelect = document.getElementById("wdr-bank-select");
+    const bankCode = bankSelect.value;
+    const bankName = bankSelect.options[bankSelect.selectedIndex]?.text || "Bank Transfer";
+    const accountNumber = document.getElementById("wdr-account-number").value.trim();
+    const accountName = document.getElementById("wdr-account-name").value.trim();
+
     if (!amount || amount <= 0 || amount > currentBalance) {
-      API.showToast("Invalid withdrawal amount", "error");
+      API.showToast("Invalid withdrawal amount or insufficient balance", "error");
+      return;
+    }
+    if (!accountNumber || accountNumber.length !== 10) {
+      API.showToast("Please enter a valid 10-digit account number", "error");
       return;
     }
 
+    const btn = document.getElementById("wdr-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Processing OPay Transfer… ⏳"; }
+
     try {
-      const res = await API.post("/api/finance/wallet/withdraw", { amount });
+      const res = await API.post("/api/finance/wallet/withdraw", {
+        amount,
+        bank_code: bankCode,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName
+      });
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(`Transfer of ₦${amount.toLocaleString()} initiated! Ref: ${res.reference}`, "success");
+      this.showTransferSuccessReceipt(res.transfer_details || {
+        amount,
+        bank_name: bankName,
+        account_number: accountNumber,
+        account_name: accountName,
+        reference: res.reference
+      });
       this.render();
       if (window.AdminPortal) window.AdminPortal.init();
-    } catch (err) {}
+    } catch (err) {
+      API.showToast(err.message || "Transfer failed. Please check details.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "Confirm & Send Transfer 🚀"; }
+    }
+  },
+
+  showTransferSuccessReceipt(details) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 360px; border-radius: 24px; text-align: center; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+        <div style="width: 60px; height: 60px; border-radius: 50%; background: #DCFCE7; color: #16A34A; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 14px;">
+          ✓
+        </div>
+        <div style="font-size: 1.25rem; font-weight: 900; color: #14532D; margin-bottom: 4px;">Transfer Successful!</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-bottom: 16px;">Funds have been sent via Instant NIBSS / OPay Clearing</div>
+
+        <!-- Amount Box -->
+        <div style="background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 14px; padding: 14px; margin-bottom: 16px;">
+          <div style="font-size: 0.72rem; color: #166534; font-weight: 700;">AMOUNT SENT</div>
+          <div style="font-size: 1.8rem; font-weight: 900; color: #15803D;">₦${(details.amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+        </div>
+
+        <!-- Receipt Rows -->
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 12px; margin-bottom: 18px; font-size: 0.74rem; text-align: left;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Recipient Name:</span>
+            <strong style="color: #1E293B;">${details.account_name || 'Verified Beneficiary'}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Bank Name:</span>
+            <strong style="color: #1E293B;">${details.bank_name || 'Commercial Bank'}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Account Number:</span>
+            <code>${details.account_number}</code>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: #64748B;">Transfer Fee:</span>
+            <strong style="color: #059669;">₦0.00 (FREE)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px dashed #CBD5E1; padding-top: 6px;">
+            <span style="color: #64748B;">Transaction Ref:</span>
+            <code style="font-size: 0.7rem;">${details.reference}</code>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button onclick="navigator.clipboard.writeText('${details.reference}'); API.showToast('Reference copied! 📋', 'success')" class="btn-secondary" style="flex: 1; justify-content: center; font-size: 0.78rem;">
+            Copy Ref
+          </button>
+          <button onclick="this.closest('.modal-backdrop').remove()" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; border-color: #047857; font-weight: 800; font-size: 0.82rem;">
+            Done 👍
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
   },
 
   async toggleRiderShift(status) {
@@ -3169,6 +4125,450 @@ const MobileApp = {
     } catch (err) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#DC2626;">❌ Image processing failed</span>';
     }
+  },
+
+  // ==========================================
+  // 📞 WEB AUDIO TELEPHONE RINGING SYSTEM (100% FREE — No Telecom Charges)
+  // Uses OscillatorNode dual-tone (440Hz + 480Hz) — authentic telephone ring.
+  // ==========================================
+  _ringAudioCtx: null,
+  _ringOsc1: null,
+  _ringOsc2: null,
+  _ringGain: null,
+  _ringInterval: null,
+  _knownNewOrderIds: new Set(),
+  _vendorPollInterval: null,
+
+  playTelephoneRingtone() {
+    try {
+      this.stopTelephoneRingtone();
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      this._ringAudioCtx = ctx;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.connect(ctx.destination);
+      this._ringGain = gain;
+
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(440, ctx.currentTime);
+      osc1.connect(gain);
+      osc1.start();
+      this._ringOsc1 = osc1;
+
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(480, ctx.currentTime);
+      osc2.connect(gain);
+      osc2.start();
+      this._ringOsc2 = osc2;
+
+      // Ring cadence: 2s ring, 4s silence (standard telephone ring pattern)
+      let ringing = false;
+      const cadence = () => {
+        if (!this._ringGain) return;
+        ringing = !ringing;
+        this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+        if (ringing) {
+          this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+          // Vibrate device during ring burst
+          if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        } else {
+          this._ringGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+        }
+      };
+      cadence(); // start immediately
+      this._ringInterval = setInterval(cadence, ringing ? 2000 : 4000);
+      // Simpler alternating: ring 2s ON, 3s OFF
+      clearInterval(this._ringInterval);
+      let isOn = true;
+      this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+      if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+      this._ringInterval = setInterval(() => {
+        if (!this._ringGain) return;
+        isOn = !isOn;
+        if (isOn) {
+          this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+          this._ringGain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.05);
+          if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        } else {
+          this._ringGain.gain.cancelScheduledValues(ctx.currentTime);
+          this._ringGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+        }
+      }, 2000);
+    } catch (e) {}
+  },
+
+  stopTelephoneRingtone() {
+    try {
+      if (this._ringInterval) { clearInterval(this._ringInterval); this._ringInterval = null; }
+      if (this._ringOsc1) { try { this._ringOsc1.stop(); } catch (e) {} this._ringOsc1 = null; }
+      if (this._ringOsc2) { try { this._ringOsc2.stop(); } catch (e) {} this._ringOsc2 = null; }
+      if (this._ringAudioCtx) { try { this._ringAudioCtx.close(); } catch (e) {} this._ringAudioCtx = null; }
+      this._ringGain = null;
+      if (navigator.vibrate) navigator.vibrate(0);
+    } catch (e) {}
+  },
+
+  // ==========================================
+  // 📲 FULL-SCREEN INCOMING ORDER CALL MODAL FOR VENDORS
+  // Triggered automatically when a NEW order arrives.
+  // ==========================================
+  showIncomingOrderCall(order) {
+    // Don't show duplicate modals
+    if (document.getElementById('vendor-incoming-call-modal')) return;
+
+    this.playTelephoneRingtone();
+
+    const items = (order.items || []).map(i => `${i.qty || 1}× ${i.product_name || 'Item'}`).join(', ');
+
+    const modal = document.createElement('div');
+    modal.id = 'vendor-incoming-call-modal';
+    modal.style.cssText = `
+      position: fixed; inset: 0; z-index: 99999;
+      background: linear-gradient(135deg, #0F172A 0%, #450A0A 60%, #7F1D1D 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      animation: rp-fadein 0.3s ease;
+    `;
+    modal.innerHTML = `
+      <style>
+        @keyframes rp-pulse-ring {
+          0% { transform: scale(0.9); opacity: 0.8; }
+          50% { transform: scale(1.15); opacity: 0.3; }
+          100% { transform: scale(0.9); opacity: 0.8; }
+        }
+        @keyframes rp-fadein { from { opacity:0; } to { opacity:1; } }
+        .rp-call-pulse {
+          position: absolute; width: 140px; height: 140px; border-radius: 50%;
+          background: rgba(185,28,28,0.35);
+          animation: rp-pulse-ring 1.4s ease-in-out infinite;
+        }
+      </style>
+
+      <div style="text-align:center; color:#FFF; padding: 0 24px; max-width: 360px; width:100%;">
+
+        <!-- Caller ID Header -->
+        <div style="font-size: 0.78rem; font-weight: 700; color: #FCA5A5; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;">
+          📦 INCOMING ORDER
+        </div>
+
+        <!-- Pulsing Ring Avatar -->
+        <div style="position:relative; display:flex; align-items:center; justify-content:center; height:160px; margin-bottom: 20px;">
+          <div class="rp-call-pulse" style="animation-delay: 0s;"></div>
+          <div class="rp-call-pulse" style="animation-delay: 0.45s; width:120px; height:120px;"></div>
+          <div style="position:relative; z-index:2; width: 96px; height: 96px; border-radius: 50%; background: #B91C1C; border: 3px solid rgba(255,255,255,0.25); display:flex; align-items:center; justify-content:center; font-size: 2.5rem;">
+            🏪
+          </div>
+        </div>
+
+        <!-- Order Info -->
+        <div style="font-size: 1.4rem; font-weight: 900; margin-bottom: 4px;">
+          Order ${order.order_ref || '#NEW'}
+        </div>
+        <div style="font-size: 0.88rem; color: #FCA5A5; margin-bottom: 6px; font-weight: 700;">
+          Customer: ${order.customer_name || 'Customer'}
+        </div>
+        <div style="font-size: 0.78rem; color: #FEE2E2; margin-bottom: 4px;">
+          ${items || 'New order received'}
+        </div>
+        <div style="font-size: 1.1rem; font-weight: 900; color: #FCD34D; margin-bottom: 24px;">
+          ₦${(order.total_amount || 0).toLocaleString()}
+        </div>
+
+        <!-- Accept / Decline Buttons -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <button onclick="MobileApp.dismissIncomingCall(false, '${order.id}')"
+            style="background: #DC2626; border: none; border-radius: 50%; width: 72px; height: 72px; font-size: 1.6rem; cursor: pointer; color: #FFF; margin: 0 auto; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 0 4px rgba(220,38,38,0.3);"
+            title="Decline Order">
+            📵
+          </button>
+          <button onclick="MobileApp.dismissIncomingCall(true, '${order.id}')"
+            style="background: #059669; border: none; border-radius: 50%; width: 72px; height: 72px; font-size: 1.6rem; cursor: pointer; color: #FFF; margin: 0 auto; display:flex; align-items:center; justify-content:center; box-shadow: 0 0 0 4px rgba(5,150,105,0.3);"
+            title="Accept & Prepare Order">
+            ✅
+          </button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <div style="text-align:center; font-size:0.65rem; color:#FCA5A5; font-weight:700;">DECLINE ORDER</div>
+          <div style="text-align:center; font-size:0.65rem; color:#6EE7B7; font-weight:700;">ACCEPT & PREPARE</div>
+        </div>
+
+        <div style="font-size:0.62rem; color:rgba(255,255,255,0.45); margin-top:20px;">
+          RushPoint Dispatch • New Order Alert
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async dismissIncomingCall(accepted, orderId) {
+    this.stopTelephoneRingtone();
+    const modal = document.getElementById('vendor-incoming-call-modal');
+    if (modal) modal.remove();
+
+    if (accepted && orderId) {
+      try {
+        const res = await API.post(`/api/orders/${orderId}/vendor-confirm`);
+        API.showToast('✅ Order Accepted! Preparing now...', 'success');
+        this.render();
+        if (window.AdminPortal) window.AdminPortal.render();
+      } catch (e) {
+        API.showToast('Could not confirm order. Please confirm manually.', 'error');
+        this.render();
+      }
+    } else {
+      API.showToast('Order declined. Customer will be notified.', 'info');
+    }
+  },
+
+  // ==========================================
+  // 🔔 VENDOR ORDER POLLING — Auto-detects new orders and triggers ringtone
+  // Polls every 15 seconds; zero cost (uses existing /api/orders/ endpoint)
+  // ==========================================
+  startVendorOrderPolling() {
+    if (this._vendorPollInterval) return; // already running
+    this._vendorPollInterval = setInterval(async () => {
+      try {
+        const user = API.getUser();
+        if (!user || user.account_type !== 'VENDOR') {
+          this.stopVendorOrderPolling();
+          return;
+        }
+        const res = await API.get('/api/orders/', { silent: true });
+        const orders = res?.orders || [];
+        const newOrders = orders.filter(o => o.status === 'NEW');
+
+        // Detect genuinely new orders (not seen before in this session)
+        const freshOrders = newOrders.filter(o => !this._knownNewOrderIds.has(String(o.id)));
+
+        // Update known IDs (include all NEW + older statuses so we don't re-ring)
+        orders.forEach(o => {
+          if (o.status !== 'NEW') this._knownNewOrderIds.add(String(o.id));
+        });
+
+        if (freshOrders.length > 0) {
+          // Update known set
+          freshOrders.forEach(o => this._knownNewOrderIds.add(String(o.id)));
+          // Show incoming call modal for the first new order
+          if (!document.getElementById('vendor-incoming-call-modal')) {
+            this.showIncomingOrderCall(freshOrders[0]);
+          }
+        }
+      } catch (e) {}
+    }, 15000); // check every 15 seconds
+  },
+
+  stopVendorOrderPolling() {
+    if (this._vendorPollInterval) {
+      clearInterval(this._vendorPollInterval);
+      this._vendorPollInterval = null;
+    }
+  },
+
+  testAndUnlockVendorAudio() {
+    this.playTelephoneRingtone();
+    setTimeout(() => {
+      this.stopTelephoneRingtone();
+      API.showToast("🔊 Speaker & Vibration Active! Your device will ring loudly for incoming orders.", "success");
+    }, 1200);
+  },
+
+  generateWhatsAppReceiptUrl(o) {
+    const text = [
+      `🧾 *RUSHPOINT OFFICIAL ORDER RECEIPT*`,
+      `Order Ref: *#${o.order_ref}*`,
+      `🏪 Merchant: ${o.store_name}`,
+      `📦 Current Status: *${o.status}*`,
+      `💰 Total Amount: *₦${(o.total_amount || 0).toLocaleString()}*`,
+      `📍 Delivery Address: ${o.delivery_address}`,
+      `🔒 4-Digit Escrow PIN: *${o.pod_otp || 'Verified'}*`,
+      `🛡️ RushPoint 100% Escrow Protection Guaranteed`,
+      `View live order status: ${window.location.origin}/?track=${o.order_ref}`
+    ].join('\n');
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  },
+
+  async showStoreQrFlyerModal() {
+    let profile = null;
+    try {
+      profile = await API.get("/api/vendors/store/profile", { silent: true });
+    } catch(e) {}
+    const store = profile?.store || { store_name: "Vendor Stall", address: "Market Stall", id: "store-1" };
+    const targetUrl = window.location.origin + '/?store=' + (store.id || 'default');
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(targetUrl)}`;
+    
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px; text-align: center;">
+        <div class="modal-header">
+          <h3 style="font-size: 1rem; font-weight: 900; color: #7F1D1D;">🖨️ Storefront QR Standee</h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div id="rp-printable-standee" style="background: #FFF; border: 3px solid #7F1D1D; border-radius: 16px; padding: 20px; margin: 12px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.06);">
+          <div style="font-weight: 900; font-size: 1.2rem; color: #7F1D1D; text-transform: uppercase;">${store.store_name}</div>
+          <div style="font-size: 0.72rem; color: #64748B; margin-top: 2px;">📍 ${store.address || 'Katsina / Lagos'}</div>
+          
+          <div style="margin: 14px auto; width: 180px; height: 180px; padding: 8px; border: 2px dashed #B91C1C; border-radius: 12px; background: #FFF;">
+            <img src="${qrUrl}" alt="Store QR Code" style="width: 100%; height: 100%; object-fit: contain;">
+          </div>
+
+          <div style="font-weight: 900; font-size: 0.92rem; color: #1E293B;">📱 SCAN TO ORDER ON RUSHPOINT</div>
+          <div style="font-size: 0.68rem; color: #059669; font-weight: 800; margin-top: 4px;">⚡ Instant Delivery to Your Doorstep</div>
+          <div style="font-size: 0.6rem; color: #94A3B8; margin-top: 10px;">Powered by RushPoint Logistics • Safe 4-Way Escrow</div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button onclick="window.print()" class="btn-primary" style="flex: 1; justify-content: center; padding: 10px; border-radius: 10px; background: #7F1D1D; font-weight: 800;">
+            🖨️ Print Standee Flyer
+          </button>
+          <button onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="padding: 10px 14px; border-radius: 10px;">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  showOrderDisputeModal(orderId, orderRef) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 440px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: #991B1B; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span> Report Order Issue (${orderRef})
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #991B1B;">
+          <strong>RushPoint Escrow Protection:</strong> You have a 2-hour window after delivery to report missing or damaged goods. Submitting this dispute freezes the merchant payout until resolved.
+        </div>
+
+        <form onsubmit="MobileApp.submitOrderDispute(event, '${orderId}')">
+          <div class="rp-form-group">
+            <label class="rp-label">Issue Category</label>
+            <select id="disp-reason" class="rp-select" required>
+              <option value="Missing Item">📦 Missing Item(s) in Parcel</option>
+              <option value="Damaged Goods">💥 Damaged or Spilled Product</option>
+              <option value="Wrong Item Delivered">🔄 Wrong Item Delivered</option>
+              <option value="Poor Quality / Expired">⚠️ Poor Quality / Spoiled Item</option>
+              <option value="Other">❓ Other Issue</option>
+            </select>
+          </div>
+
+          <div class="rp-form-group">
+            <label class="rp-label">Explanation & Details</label>
+            <textarea id="disp-details" class="rp-textarea" rows="3" placeholder="Describe exactly what was missing or damaged..." required></textarea>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 14px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #DC2626; border-color: #B91C1C; font-weight: 800;">
+              Submit Dispute to Support
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async submitOrderDispute(e, orderId) {
+    e.preventDefault();
+    const reason = document.getElementById("disp-reason").value;
+    const details = document.getElementById("disp-details").value.trim();
+
+    try {
+      const res = await API.post(`/api/orders/${orderId}/dispute`, { reason, details });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Dispute submitted. Support is reviewing.", "success");
+      this.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to submit dispute", "error");
+    }
+  },
+
+  showVendorOperatingHoursModal(openingTime = "08:00", closingTime = "20:00", isAutoClosed = false) {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 420px; border-radius: 18px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: #1E293B; display: flex; align-items: center; gap: 8px;">
+            <span>⏰</span> Store Operating Hours & Pause
+          </h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.74rem; color: #64748B;">
+          Set daily opening and closing hours. During prayer times or night rest, toggle <strong>Prayer / Rest Pause</strong> to avoid missed orders.
+        </div>
+
+        <form onsubmit="MobileApp.saveVendorOperatingHours(event)">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="rp-form-group">
+              <label class="rp-label">Daily Open Time</label>
+              <input type="time" id="vnd-open-time" class="rp-input" value="${openingTime || '08:00'}" required>
+            </div>
+            <div class="rp-form-group">
+              <label class="rp-label">Daily Close Time</label>
+              <input type="time" id="vnd-close-time" class="rp-input" value="${closingTime || '20:00'}" required>
+            </div>
+          </div>
+
+          <div class="rp-form-group" style="margin-top: 10px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.78rem; font-weight: 800; color: #92400E;">
+              <input type="checkbox" id="vnd-auto-pause" ${isAutoClosed ? 'checked' : ''} style="width: 18px; height: 18px;">
+              ⏸️ Temporary Pause (Prayer / Lunch / Rest)
+            </label>
+            <div style="font-size: 0.65rem; color: #78350F; margin-top: 4px; margin-left: 26px;">
+              When checked, customers cannot place new orders until unchecked.
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center;">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; font-weight: 800;">
+              Save Hours 💾
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  },
+
+  async saveVendorOperatingHours(e) {
+    e.preventDefault();
+    const opening_time = document.getElementById("vnd-open-time").value;
+    const closing_time = document.getElementById("vnd-close-time").value;
+    const is_auto_closed = document.getElementById("vnd-auto-pause").checked;
+
+    try {
+      const res = await API.put("/api/vendors/operating-hours", { opening_time, closing_time, is_auto_closed });
+      document.querySelector(".rp-modal-overlay")?.remove();
+      API.showToast(res.message || "Operating hours updated!", "success");
+      this.render();
+    } catch (err) {
+      API.showToast(err.message || "Failed to update operating hours", "error");
+    }
+  },
+
+  generateVendorOrderWhatsAppAlert(order, vendorPhone) {
+    const cleanPhone = (vendorPhone || "").replace(/[^0-9]/g, "");
+    const msg = `👋 Salam/Hello! You have a new RushPoint order *${order.order_ref}*.\n📦 Total: ₦${(order.total_amount || 0).toLocaleString()}\n📍 Please check your RushPoint app to confirm and package the items!`;
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
   },
 
 };

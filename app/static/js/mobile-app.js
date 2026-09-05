@@ -1466,17 +1466,11 @@ const MobileApp = {
       return;
     }
 
-    let dedicatedAcc = null;
     let walletBal = 0;
     try {
       const wRes = await API.get("/api/finance/wallet/dedicated-account");
-      if (wRes && wRes.dedicated_account) dedicatedAcc = wRes.dedicated_account;
       if (wRes && wRes.wallet_balance !== undefined) walletBal = wRes.wallet_balance;
     } catch(e) {}
-
-    const accNum = dedicatedAcc ? dedicatedAcc.account_number : "9901847291";
-    const bankName = dedicatedAcc ? dedicatedAcc.bank_name : "Wema Bank / OPay Virtual";
-    const accName = dedicatedAcc ? dedicatedAcc.account_name : "RushPoint - Fatima Abubakar";
 
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
@@ -1499,139 +1493,40 @@ const MobileApp = {
             <div style="font-size: 0.68rem; color: #059669; font-weight: 800; margin-top: 2px;">🛡️ 4-Way Escrow: Released Only Upon 4-Digit Delivery PIN Verification</div>
           </div>
 
-          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Select Payment Option:</div>
+          <div style="font-size: 0.78rem; font-weight: 800; color: #1E293B; margin-bottom: 8px;">Choose Payment Channel:</div>
 
           <!-- 1. WALLET CHECKOUT (If funds available) -->
-          <div style="background: ${walletBal >= totalAmount ? '#ECFDF5' : '#F8FAFC'}; border: 1.5px solid ${walletBal >= totalAmount ? '#86EFAC' : '#E2E8F0'}; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+          <div style="background: ${walletBal >= totalAmount ? '#ECFDF5' : '#F8FAFC'}; border: 1.5px solid ${walletBal >= totalAmount ? '#86EFAC' : '#E2E8F0'}; border-radius: 14px; padding: 14px; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: ${walletBal >= totalAmount ? '#065F46' : '#64748B'};">🟢 RushPoint Customer Wallet</span>
-              <span style="font-size: 0.65rem; color: #64748B; font-weight: 700;">Balance: ₦${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              <span style="font-size: 0.85rem; font-weight: 900; color: ${walletBal >= totalAmount ? '#065F46' : '#64748B'};">🟢 RushPoint Customer Wallet</span>
+              <span style="font-size: 0.7rem; color: #64748B; font-weight: 700;">Balance: ₦${walletBal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
             </div>
             ${walletBal >= totalAmount ? `
-              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'WALLET')" style="width: 100%; margin-top: 6px; background: #059669; color: #FFF; border: none; padding: 10px; border-radius: 10px; font-weight: 900; font-size: 0.84rem; cursor: pointer;">
+              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'WALLET')" style="width: 100%; margin-top: 8px; background: #059669; color: #FFF; border: none; padding: 12px; border-radius: 10px; font-weight: 900; font-size: 0.88rem; cursor: pointer;">
                 ⚡ Pay Instantly from Wallet (₦${totalAmount.toLocaleString()})
               </button>
             ` : `
-              <div style="font-size: 0.68rem; color: #DC2626; margin-top: 4px; font-weight: 600;">Insufficient wallet balance. Choose Bank Transfer, OPay, Card or USSD below.</div>
+              <div style="font-size: 0.72rem; color: #DC2626; margin-top: 4px; font-weight: 600;">Wallet balance insufficient. Click Continue to Pay below to pay via Bank Transfer, Card, OPay or USSD.</div>
             `}
           </div>
 
-          <!-- 2. DIRECT BANK TRANSFER -->
-          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: #166534;">🏦 Direct Bank Transfer</span>
-              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">INSTANT RECOGNITION</span>
+          <!-- 2. LIVE FLUTTERWAVE GATEWAY (Bank Transfer, Card, USSD, OPay) -->
+          <div style="background: #FFF; border: 1.5px solid #CBD5E1; border-radius: 14px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 0.85rem; font-weight: 900; color: #0F172A;">🔐 Online / Bank Transfer Payment</span>
+              <span style="font-size: 0.62rem; background: #EFF6FF; color: #1D4ED8; padding: 2px 8px; border-radius: 6px; font-weight: 800;">REAL TIME</span>
             </div>
-            <div style="font-size: 0.7rem; color: #374151; margin-bottom: 6px;">Transfer exact amount to your dedicated RushPoint account:</div>
-            <div style="background: #FFF; border: 1px dashed #4ADE80; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="font-size: 0.65rem; color: #64748B;">${bankName}</div>
-                <div style="font-size: 1.15rem; font-weight: 900; color: #14532D; letter-spacing: 1.5px;">${accNum}</div>
-                <div style="font-size: 0.65rem; color: #166534; font-weight: 600;">${accName}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('Account number copied! 📋', 'success')" style="background: #166534; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
-                Copy
-              </button>
+            <p style="font-size: 0.72rem; color: #475569; line-height: 1.4; margin-bottom: 12px;">
+              Pay with your Nigerian bank app (live account number provided), OPay, Debit Card (Mastercard/Visa/Verve), or USSD.
+            </p>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+              <span style="background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">🏦 Bank Transfer</span>
+              <span style="background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">💳 ATM Card</span>
+              <span style="background: #FDF2F8; color: #BE185D; border: 1px solid #FBCFE8; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">🔴 OPay</span>
+              <span style="background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;">📱 USSD</span>
             </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'TRANSFER')" style="width: 100%; margin-top: 8px; background: #166534; color: #FFF; border: none; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer;">
-              I Have Made This Transfer ➔
-            </button>
-          </div>
-
-          <!-- 3. PAY WITH OPAY -->
-          <div style="background: #F0FDF4; border: 1.5px solid #22C55E; border-radius: 14px; padding: 12px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 900; color: #15803D; display: flex; align-items: center; gap: 6px;">
-                <span>🔴</span> Pay with OPay
-              </span>
-              <span style="font-size: 0.62rem; background: #DCFCE7; color: #15803D; padding: 2px 6px; border-radius: 6px; font-weight: 800;">OPAY APP / *955#</span>
-            </div>
-            <div style="font-size: 0.7rem; color: #374151; margin-bottom: 6px;">Transfer directly from your OPay app to our instant receiving wallet:</div>
-            <div style="background: #FFF; border: 1px dashed #22C55E; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <div>
-                <div style="font-size: 0.65rem; color: #64748B;">OPay Wallet / NUBAN</div>
-                <div style="font-size: 1.15rem; font-weight: 900; color: #047857; letter-spacing: 1.5px;">${accNum}</div>
-                <div style="font-size: 0.65rem; color: #15803D; font-weight: 600;">${accName}</div>
-              </div>
-              <button onclick="navigator.clipboard.writeText('${accNum}'); API.showToast('OPay account copied! 📋', 'success')" style="background: #059669; color: #FFF; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; cursor: pointer;">
-                Copy
-              </button>
-            </div>
-            <div style="display: flex; gap: 6px;">
-              <a href="tel:*955#" style="flex: 1; text-align: center; text-decoration: none; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 0.74rem;">
-                📱 Dial *955#
-              </a>
-              <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'OPAY')" style="flex: 2; background: #059669; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 0.78rem; cursor: pointer;">
-                I Have Paid with OPay ➔
-              </button>
-            </div>
-          </div>
-
-          <!-- 4. ONLINE CARD PAYMENT -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">💳 Debit / Credit Card</div>
-              <div style="font-size: 0.68rem; color: #64748B;">Mastercard, Visa, Verve (Instant Gateway)</div>
-            </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'CARD')" style="background: #B91C1C; color: #FFF; border: none; padding: 8px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Pay with Card
-            </button>
-          </div>
-
-          <!-- 5. USSD BANKING -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <div>
-                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">📱 USSD Banking Code</div>
-                <div style="font-size: 0.68rem; color: #64748B;">Dial instant code on your mobile phone</div>
-              </div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
-              <a href="tel:*737#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">GTB *737#</a>
-              <a href="tel:*966#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Zenith *966#</a>
-              <a href="tel:*901#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">Access *901#</a>
-              <a href="tel:*919#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">UBA *919#</a>
-              <a href="tel:*894#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">FirstBank *894#</a>
-              <a href="tel:*955#" style="text-align: center; text-decoration: none; background: #F8FAFC; border: 1px solid #CBD5E1; color: #334155; padding: 6px 4px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;">OPay *955#</a>
-            </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'USSD')" style="width: 100%; margin-top: 8px; background: #334155; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              Confirm USSD Payment ➔
-            </button>
-          </div>
-
-          <!-- 6. SCAN QR CODE -->
-          <div style="background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <div>
-                <div style="font-size: 0.82rem; font-weight: 800; color: #1E293B;">🔳 Scan to Pay (QR Code)</div>
-                <div style="font-size: 0.68rem; color: #64748B;">Scan with OPay, PalmPay, or bank app</div>
-              </div>
-            </div>
-            <div style="text-align: center; padding: 10px; background: #F8FAFC; border-radius: 8px; margin: 6px 0;">
-              <div style="display: inline-block; padding: 8px; background: #FFF; border: 1px solid #E2E8F0; border-radius: 8px;">
-                <svg width="120" height="120" viewBox="0 0 100 100">
-                  <rect width="100" height="100" fill="#ffffff" />
-                  <rect x="10" y="10" width="30" height="30" fill="#0f172a" />
-                  <rect x="15" y="15" width="20" height="20" fill="#ffffff" />
-                  <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
-                  <rect x="60" y="10" width="30" height="30" fill="#0f172a" />
-                  <rect x="65" y="15" width="20" height="20" fill="#ffffff" />
-                  <rect x="70" y="20" width="10" height="10" fill="#0f172a" />
-                  <rect x="10" y="60" width="30" height="30" fill="#0f172a" />
-                  <rect x="15" y="65" width="20" height="20" fill="#ffffff" />
-                  <rect x="20" y="70" width="10" height="10" fill="#0f172a" />
-                  <circle cx="50" cy="50" r="12" fill="#B91C1C" />
-                  <text x="50" y="54" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="900">RP</text>
-                  <rect x="45" y="15" width="10" height="10" fill="#0f172a" />
-                  <rect x="45" y="75" width="10" height="10" fill="#0f172a" />
-                  <rect x="75" y="55" width="15" height="15" fill="#0f172a" />
-                  <rect x="55" y="75" width="15" height="15" fill="#0f172a" />
-                </svg>
-              </div>
-              <div style="font-size: 0.65rem; color: #64748B; margin-top: 4px;">Point camera or OPay scanner at this QR code</div>
-            </div>
-            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'QR_CODE')" style="width: 100%; background: #0284C7; color: #FFF; border: none; padding: 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer;">
-              I Have Scanned & Paid ➔
+            <button onclick="MobileApp.processMultiPayment('${address}', '${phone}', 'FLUTTERWAVE')" style="width: 100%; background: linear-gradient(135deg, #B91C1C, #DC2626); color: #FFF; border: none; padding: 13px; border-radius: 12px; font-weight: 900; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <span>🔐</span> Continue to Live Payment (₦${totalAmount.toLocaleString()})
             </button>
           </div>
         </div>

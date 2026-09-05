@@ -2,61 +2,345 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>RushPoint — Marketplace & Logistics App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RushingPoint V1.0 — Marketplace & Logistics Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/maroon-theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/css/maroon-theme.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      -webkit-tap-highlight-color: transparent;
-    }
-    html, body {
-      width: 100%;
-      height: 100%;
-      min-height: 100vh;
-      background: #2B0008;
-      overflow-x: hidden;
-      overflow-y: auto;
-    }
-    #mobile-app-root {
-      width: 100%;
-      min-height: 100vh;
+    html, body { height: 100%; overflow: hidden; }
+    #app-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .workspace-container { flex: 1; display: flex; overflow: hidden; }
+    .divider-handle {
+      width: 6px;
+      background: var(--maroon-border);
+      cursor: col-resize;
       display: flex;
-      flex-direction: column;
-      background: #2B0008;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: background 0.15s;
+      flex-shrink: 0;
     }
-    .mobile-app-shell {
-      width: 100%;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+    .divider-handle:hover { background: var(--maroon-primary); }
+    .divider-dots { display: flex; flex-direction: column; gap: 4px; }
+    .divider-dots span { width: 4px; height: 4px; background: var(--gray-600); border-radius: 50%; }
+    .admin-view-pane { flex: 1; height: 100%; overflow: hidden; min-width: 500px; }
+    .mobile-view-pane { width: 440px; height: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #E5E7EB; padding: 16px; }
+    .phone-mockup-frame { width: 370px; height: 740px; background: #FFF; border-radius: 40px; box-shadow: 0 0 0 12px #1F2937, 0 0 0 14px #374151, 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .app-screen-container { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .phone-notch { width: 130px; height: 22px; background: #1F2937; position: absolute; top: 0; left: 50%; transform: translateX(-50%); border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; z-index: 100; }
+    .phone-status-bar { height: 36px; background: #FFF; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 0.7rem; font-weight: 700; color: var(--gray-700); flex-shrink: 0; z-index: 50; }
+
+    /* NATIVE FULLSCREEN MOBILE OPTIMIZATION (<768px) */
+    @media (max-width: 768px) {
+      .master-header { display: none !important; }
+      .admin-view-pane { display: none !important; }
+      .divider-handle { display: none !important; }
+      .mobile-view-pane {
+        width: 100% !important;
+        height: 100% !important;
+        padding: 0 !important;
+        background: #FFFFFF !important;
+      }
+      .phone-mockup-frame {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .phone-notch { display: none !important; }
+      .phone-status-bar { display: none !important; }
     }
   </style>
 </head>
 <body>
+<div id="app-root">
 
-  <div id="mobile-app-root">
-    <!-- Rendered dynamically by MobileApp -->
+  <!-- ======= MASTER HEADER BAR ======= -->
+  <header class="master-header">
+    <div class="brand-badge">
+      <img src="/static/img/rushpoint-logo-white-badge.png" alt="RushPoint" style="width:38px;height:38px;border-radius:10px;object-fit:contain;background:#FFFFFF;padding:3px;box-shadow:0 3px 10px rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.3);" onerror="this.src='/static/img/rushpoint-logo.png'">
+      <div class="brand-logo-icon" style="display:none">RP</div>
+      <div>
+        <div class="brand-title">RushPoint</div>
+        <div class="brand-subtitle">Logistics & Marketplace Platform</div>
+      </div>
+    </div>
+
+    <div class="view-switcher-bar">
+      <button class="view-btn" id="admin-btn" onclick="setLayout('admin')">
+        <span>🏢</span> Admin Operations Portal
+      </button>
+      <button class="view-btn" id="mobile-btn" onclick="setLayout('mobile')">
+        <span>📱</span> Mobile App & Storefront
+      </button>
+      <button class="view-btn active" id="split-btn" onclick="setLayout('split')">
+        <span>⚖️</span> Dual Console View
+      </button>
+    </div>
+
+    <div class="auth-status-bar" id="header-auth-bar">
+      <!-- Populated by JS -->
+    </div>
+  </header>
+
+  <!-- ======= MAIN WORKSPACE ======= -->
+  <div class="workspace-container" id="workspace">
+
+    <!-- LEFT: Web Admin Panel -->
+    <div class="admin-view-pane" id="admin-pane">
+      <div id="admin-portal-root" style="height: 100%; overflow-y: auto;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--gray-600); padding: 40px;">
+          <div style="font-size: 2.8rem; margin-bottom: 12px;">🔐</div>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--blood-primary);">RushingPoint Admin Operations Console</h3>
+          <p style="font-size: 0.85rem; text-align: center; max-width: 360px; margin-top: 6px; color: var(--gray-600); line-height: 1.4;">
+            Enterprise management portal for fleet dispatch, merchant stores, financial settlements, waybills & live support.
+          </p>
+          <button onclick="showAdminLoginModal()" class="btn-primary" style="margin-top: 18px; padding: 11px 26px; font-weight: 800; border-radius: 12px;">
+            👑 Sign In as Administrator
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIVIDER HANDLE -->
+    <div class="divider-handle" id="divider">
+      <div class="divider-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <!-- RIGHT: Mobile App Phone Frame -->
+    <div class="mobile-view-pane" id="mobile-pane">
+      <div class="phone-mockup-frame">
+        <div class="phone-notch"></div>
+        <div class="phone-status-bar">
+          <span id="phone-time">9:41 AM</span>
+          <span>📶 🔋97%</span>
+        </div>
+        <div class="app-screen-container">
+          <div id="mobile-app-root" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+            <!-- Populated by MobileApp.init() -->
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
+</div>
 
-  <script src="js/api.js"></script>
-  <script src="js/mobile-app.js"></script>
-  <script>
-    // Ensure API points to live Render cloud instance
-    if (typeof API !== 'undefined') {
-      API.baseUrl = "https://rushpoint2.onrender.com";
-      localStorage.setItem('rp_api_endpoint', 'https://rushpoint2.onrender.com');
+<!-- GLOBAL MODAL CONTAINER -->
+<div id="global-modal-container"></div>
+
+<!-- Scripts -->
+<script src="/static/js/api.js"></script>
+<script src="/static/js/mobile-app.js"></script>
+<script src="/static/js/admin-portal.js"></script>
+
+<script>
+  // ==========================================
+  // HEADER AUTH BAR
+  // ==========================================
+  function updateHeaderAuthBar() {
+    const user = API.getUser();
+    const bar = document.getElementById("header-auth-bar");
+    if (!bar) return;
+    if (user) {
+      bar.innerHTML = `
+        <div class="user-tag">👤 ${user.full_name} <span style="opacity:0.7;">(${user.role_name})</span></div>
+        <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+      `;
+    } else {
+      bar.innerHTML = `
+        <div style="font-size: 0.8rem; opacity: 0.85;">Not signed in</div>
+      `;
     }
-    document.addEventListener("DOMContentLoaded", () => {
-      if (typeof MobileApp !== 'undefined' && typeof MobileApp.init === 'function') {
-        MobileApp.init();
+  }
+
+  function doLogout() {
+    API.setToken(null);
+    API.setUser(null);
+    localStorage.removeItem("rp_wallet");
+    updateHeaderAuthBar();
+    MobileApp.cart = [];
+    MobileApp.activeTab = "home";
+    MobileApp.render();
+    document.getElementById("admin-portal-root").innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--gray-600); padding: 40px;">
+        <div style="font-size: 2.5rem;">🔐</div>
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--maroon-primary); margin-top: 10px;">Admin Operations Console</h3>
+        <p style="font-size: 0.85rem; margin-top: 6px; text-align: center;">Sign in with authorized administrator credentials to manage fleet, dispatch & finance.</p>
+        <button onclick="showAdminLoginModal()" class="btn-primary" style="margin-top: 14px; padding: 10px 20px;">👑 Sign In as Administrator</button>
+      </div>
+    `;
+  }
+
+  function showAdminLoginModal() {
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop rp-modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
+        <div class="modal-header">
+          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-dark);">👑 Administrator Sign In</h3>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+        </div>
+        <form onsubmit="handleAdminModalLogin(event)">
+          <div class="rp-form-group">
+            <label class="rp-label">Admin Email or Username</label>
+            <input type="text" id="adm-modal-email" class="rp-input" placeholder="admin@example.com" required>
+          </div>
+          <div class="rp-form-group">
+            <label class="rp-label">Password</label>
+            <input type="password" id="adm-modal-pwd" class="rp-input" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px; margin-top: 6px; font-weight: 800;">
+            Sign In to Admin Portal 🔐
+          </button>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  async function handleAdminModalLogin(e) {
+    e.preventDefault();
+    const login = document.getElementById("adm-modal-email").value.trim();
+    const password = document.getElementById("adm-modal-pwd").value;
+    const submitBtn = e.target.querySelector("button[type=submit]");
+
+    // Show loading state
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Signing in…"; }
+
+    try {
+      const res = await API.post("/api/auth/login", { login, password });
+
+      if (res.user.account_type !== "ADMIN" && res.user.account_type !== "STAFF") {
+        API.showToast("❌ Access denied. This account is not authorized for the Admin Console.", "error");
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Sign In to Admin Portal 🔐"; }
+        return;
       }
-    });
-  </script>
+
+      // Successful admin login
+      API.setToken(res.token);
+      API.setUser(res.user);
+
+      // Close the modal
+      document.querySelector(".rp-modal-overlay")?.remove();
+
+      // Update header auth bar
+      updateHeaderAuthBar();
+
+      // Switch layout to admin-only view so the dashboard is fully visible
+      setLayout("admin");
+
+      // Highlight the admin-view button as active
+      document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
+      const adminBtn = document.getElementById("admin-btn");
+      if (adminBtn) adminBtn.classList.add("active");
+
+      // Render the full admin dashboard
+      await AdminPortal.init();
+
+      // Scroll the admin pane to top
+      const adminPane = document.getElementById("admin-pane");
+      if (adminPane) adminPane.scrollTop = 0;
+
+      API.showToast(`✅ Welcome back, ${res.user.full_name}! Admin portal loaded.`, "success");
+
+    } catch (err) {
+      const msg = err?.detail || err?.message || "Login failed. Please check your credentials.";
+      API.showToast(`❌ ${msg}`, "error");
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Sign In to Admin Portal 🔐"; }
+    }
+  }
+
+  // ==========================================
+  // LAYOUT SWITCHER
+  // ==========================================
+  function setLayout(mode) {
+    document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById(mode === "split" ? "split-btn" : mode === "admin" ? "admin-btn" : "mobile-btn").classList.add("active");
+    
+    const adminPane = document.getElementById("admin-pane");
+    const mobilePane = document.getElementById("mobile-pane");
+    const divider = document.getElementById("divider");
+    
+    if (mode === "split") {
+      adminPane.style.display = "block";
+      mobilePane.style.display = "flex";
+      divider.style.display = "flex";
+      adminPane.style.flex = "1";
+      mobilePane.style.width = "440px";
+    } else if (mode === "admin") {
+      adminPane.style.display = "block";
+      adminPane.style.flex = "1";
+      mobilePane.style.display = "none";
+      divider.style.display = "none";
+    } else {
+      adminPane.style.display = "none";
+      mobilePane.style.display = "flex";
+      mobilePane.style.width = "100%";
+      mobilePane.style.flex = "1";
+      divider.style.display = "none";
+    }
+  }
+
+  // ==========================================
+  // DRAGGABLE DIVIDER (RESIZABLE SPLIT VIEW)
+  // ==========================================
+  const divider = document.getElementById("divider");
+  const workspace = document.getElementById("workspace");
+  const adminPane = document.getElementById("admin-pane");
+  let isDragging = false;
+
+  divider.addEventListener("mousedown", () => { isDragging = true; document.body.style.cursor = "col-resize"; });
+  document.addEventListener("mouseup", () => { isDragging = false; document.body.style.cursor = ""; });
+  document.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    const rect = workspace.getBoundingClientRect();
+    const newWidth = e.clientX - rect.left;
+    if (newWidth > 400 && newWidth < rect.width - 440) {
+      adminPane.style.flex = "none";
+      adminPane.style.width = `${newWidth}px`;
+    }
+  });
+
+  // ==========================================
+  // LIVE CLOCK IN PHONE NOTCH
+  // ==========================================
+  function updatePhoneClock() {
+    const el = document.getElementById("phone-time");
+    if (el) {
+      const now = new Date();
+      el.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+  }
+  setInterval(updatePhoneClock, 60000);
+  updatePhoneClock();
+
+  // ==========================================
+  // BOOT SEQUENCE
+  // ==========================================
+  document.addEventListener("DOMContentLoaded", async () => {
+    // If opened on phone or tablet screen, default to full mobile layout
+    if (window.innerWidth <= 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      setLayout("mobile");
+    }
+    updateHeaderAuthBar();
+    MobileApp.init();
+    
+    // If admin is already logged in (from previous session), load admin portal
+    const user = API.getUser();
+    if (user && (user.account_type === "ADMIN" || user.account_type === "STAFF")) {
+      AdminPortal.init();
+    }
+  });
+</script>
+
 </body>
 </html>
