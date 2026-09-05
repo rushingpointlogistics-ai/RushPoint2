@@ -131,6 +131,19 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# Universal asset root mounts for both web and mobile WebView compatibility
+css_dir = os.path.join(static_dir, "css")
+if os.path.exists(css_dir):
+    app.mount("/css", StaticFiles(directory=css_dir), name="css")
+
+js_dir = os.path.join(static_dir, "js")
+if os.path.exists(js_dir):
+    app.mount("/js", StaticFiles(directory=js_dir), name="js")
+
+img_dir = os.path.join(static_dir, "img")
+if os.path.exists(img_dir):
+    app.mount("/img", StaticFiles(directory=img_dir), name="img")
+
 # Mount Downloads Directory at /downloads (APK, IPA, ZIPs)
 downloads_dir = os.path.join(static_dir, "downloads")
 os.makedirs(downloads_dir, exist_ok=True)
@@ -167,10 +180,10 @@ def serve_landing():
 @app.get("/app")
 @app.get("/mobile")
 def serve_mobile_app():
-    app_path = os.path.join(static_dir, "app.html")
-    if os.path.exists(app_path):
-        return FileResponse(app_path)
-    return FileResponse(os.path.join(static_dir, "index.html"))
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return FileResponse(os.path.join(static_dir, "landing.html"))
 
 @app.get("/admin")
 @app.get("/portal-admin-console")

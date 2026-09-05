@@ -662,6 +662,139 @@
       transform: translateX(0);
     }
 
+    /* CROSS-PLATFORM SHOWCASE SECTION */
+    .cross-platform-section {
+      padding: 90px 6%;
+      background: linear-gradient(180deg, #FFFFFF 0%, #FFF5F5 50%, #FFFFFF 100%);
+      border-bottom: 1px solid var(--gray-200);
+      position: relative;
+    }
+    .xp-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .xp-header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+    .xp-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+    }
+    .xp-card {
+      background: #FFFFFF;
+      border: 1.5px solid #FECACA;
+      border-radius: 24px;
+      padding: 34px 28px;
+      box-shadow: 0 8px 30px rgba(185, 28, 28, 0.05);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .xp-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 16px 40px rgba(185, 28, 28, 0.12);
+      border-color: #EF4444;
+    }
+    .xp-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .xp-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: #FEE2E2;
+      color: #B91C1C;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+    }
+    .xp-badge {
+      background: #FEF2F2;
+      color: #991B1B;
+      border: 1px solid #FECACA;
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .xp-title {
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: #111827;
+      margin-bottom: 8px;
+    }
+    .xp-desc {
+      font-size: 0.9rem;
+      color: #4B5563;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .xp-features {
+      list-style: none;
+      margin-bottom: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .xp-features li {
+      font-size: 0.84rem;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+    .xp-check {
+      color: #059669;
+      font-weight: 900;
+      font-size: 0.95rem;
+    }
+    .xp-btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .xp-btn {
+      padding: 11px 18px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .xp-btn-primary {
+      background: linear-gradient(135deg, #991B1B 0%, #DC2626 100%);
+      color: #FFF;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35);
+    }
+    .xp-btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
+    }
+    .xp-btn-outline {
+      background: #FFF;
+      color: #7F1D1D;
+      border: 1.5px solid #FECACA;
+    }
+    .xp-btn-outline:hover {
+      background: #FEE2E2;
+      border-color: #DC2626;
+    }
+
     /* RESPONSIVE */
     @media (max-width: 1100px) {
       .steps-grid { grid-template-columns: repeat(2, 1fr); }
@@ -669,6 +802,7 @@
       .footer-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 900px) {
+      .xp-grid { grid-template-columns: 1fr; }
       .hero-container { grid-template-columns: 1fr; gap: 40px; }
       .hero-mockup { max-width: 480px; }
       .features-grid { grid-template-columns: 1fr 1fr; }
@@ -708,6 +842,7 @@
     <span class="brand-name">Rush<span>Point</span></span>
   </a>
   <ul class="nav-links">
+    <li><a href="#cross-platform">Cross-Platform</a></li>
     <li><a href="#how-it-works">How It Works</a></li>
     <li><a href="#features">Features</a></li>
     <li><a href="#calculator">Live Pricing</a></li>
@@ -717,21 +852,23 @@
     <li><a href="/invite-signup.html">Become a Partner</a></li>
   </ul>
   <div class="nav-actions">
-    <a href="/dual-console" class="btn-nav btn-nav-ghost">🌐 Web App</a>
-    <a href="/dual-console" class="btn-nav btn-nav-primary">📱 Open App</a>
+    <a href="/dual-console" class="btn-nav btn-nav-ghost">⚖️ Dual Console</a>
+    <a href="/dual-console?view=mobile" class="btn-nav btn-nav-primary" id="nav-open-app-btn">📱 Open App</a>
     <button class="mobile-menu-btn" onclick="toggleMobileNav()" aria-label="Menu">&#9776;</button>
   </div>
 </header>
 
 <div class="mobile-nav-drawer" id="mobileNav">
+  <a href="/dual-console?view=mobile" onclick="toggleMobileNav()" style="color:#FB7185;font-weight:900;font-size:1.05rem;">📱 Open Mobile App (Full Screen) &rarr;</a>
+  <a href="/dual-console?view=split" onclick="toggleMobileNav()" style="color:#CBD5E1;">⚖️ Desktop Dual Console &rarr;</a>
+  <a href="#cross-platform" onclick="toggleMobileNav()">🌍 Universal Cross-Platform</a>
   <a href="#how-it-works" onclick="toggleMobileNav()">How It Works</a>
   <a href="#features" onclick="toggleMobileNav()">Features</a>
   <a href="#calculator" onclick="toggleMobileNav()">Live Pricing Calculator</a>
   <a href="#testimonials" onclick="toggleMobileNav()">Customer Reviews</a>
   <a href="#faq" onclick="toggleMobileNav()">FAQ</a>
-  <a href="#download" onclick="toggleMobileNav()">Download App</a>
+  <a href="/download/android-apk" onclick="toggleMobileNav()" style="color:#34D399;font-weight:800;">🤖 Download Android APK</a>
   <a href="/invite-signup.html" onclick="toggleMobileNav()">Become a Partner</a>
-  <a href="/dual-console" onclick="toggleMobileNav()" style="color:#FB7185;">Open Web App &rarr;</a>
 </div>
 
 
@@ -848,6 +985,133 @@
     <div class="trust-item">
       <div class="trust-icon">&#128737;</div>
       <div><div class="trust-value">SSL</div><div class="trust-desc">256-Bit Encrypted</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- UNIVERSAL CROSS-PLATFORM SECTION -->
+<section class="cross-platform-section" id="cross-platform">
+  <div class="xp-container">
+    <div class="xp-header">
+      <span class="section-eyebrow">Universal Cross-Platform</span>
+      <h2 class="section-heading">Built for Any Device, Any Screen</h2>
+      <p class="section-sub" style="margin:0 auto;text-align:center;max-width:700px;">
+        Whether you are on an Android smartphone, iPhone, tablet, or desktop workstation, RushPoint provides a tailored, high-performance experience with real-time sync and live payments.
+      </p>
+    </div>
+
+    <div class="xp-grid">
+      <!-- Card 1: Android Native & PWA -->
+      <div class="xp-card">
+        <div>
+          <div class="xp-card-top">
+            <div class="xp-icon">&#129302;</div>
+            <span class="xp-badge">Android v1.0.1</span>
+          </div>
+          <h3 class="xp-title">Android Native APK &amp; Web App</h3>
+          <p class="xp-desc">
+            Full-featured standalone Android app with native hardware acceleration, instant background push notifications, and GPS courier tracking.
+          </p>
+          <ul class="xp-features">
+            <li><span class="xp-check">&#10003;</span> Signed Release APK with auto-update support</li>
+            <li><span class="xp-check">&#10003;</span> Real-time Flutterwave live checkout &amp; wallet top-up</li>
+            <li><span class="xp-check">&#10003;</span> Live rider delivery tracking &amp; 4-digit PIN escrow</li>
+            <li><span class="xp-check">&#10003;</span> Android 7.0+ to Android 15 fully compatible</li>
+          </ul>
+        </div>
+        <div class="xp-btn-row">
+          <a href="/download/android-apk" class="xp-btn xp-btn-primary">
+            &#11015;&#65039; Download Android APK
+          </a>
+          <a href="/dual-console?view=mobile" class="xp-btn xp-btn-outline">
+            &#128241; Open in Browser
+          </a>
+        </div>
+      </div>
+
+      <!-- Card 2: Apple iOS / iPhone -->
+      <div class="xp-card">
+        <div>
+          <div class="xp-card-top">
+            <div class="xp-icon">&#127823;</div>
+            <span class="xp-badge">Apple iOS &amp; iPad</span>
+          </div>
+          <h3 class="xp-title">iPhone &amp; iPad PWA Experience</h3>
+          <p class="xp-desc">
+            Optimized for Safari WebKit with instant "Add to Home Screen" standalone app mode. Zero App Store friction, fluid animations, and safe-area notch support.
+          </p>
+          <ul class="xp-features">
+            <li><span class="xp-check">&#10003;</span> Standalone fullscreen app mode (PWA)</li>
+            <li><span class="xp-check">&#10003;</span> Dynamic Island &amp; notch safe-area integration</li>
+            <li><span class="xp-check">&#10003;</span> FaceID / TouchID biometric checkout ready</li>
+            <li><span class="xp-check">&#10003;</span> Native IPA installation available for registered devices</li>
+          </ul>
+        </div>
+        <div class="xp-btn-row">
+          <a href="/dual-console?view=mobile" class="xp-btn xp-btn-primary">
+            &#128241; Launch on iPhone
+          </a>
+          <a href="#download" class="xp-btn xp-btn-outline">
+            &#127823; iOS Install Guide
+          </a>
+        </div>
+      </div>
+
+      <!-- Card 3: Desktop & Laptop Workstation -->
+      <div class="xp-card">
+        <div>
+          <div class="xp-card-top">
+            <div class="xp-icon">&#128187;</div>
+            <span class="xp-badge">Desktop &amp; Tablet</span>
+          </div>
+          <h3 class="xp-title">Dual Console &amp; Admin Portal</h3>
+          <p class="xp-desc">
+            The power user experience for merchant stall managers, logistics dispatchers, and platform administrators on Windows, Mac, and Linux.
+          </p>
+          <ul class="xp-features">
+            <li><span class="xp-check">&#10003;</span> Split Dual Console: Admin Portal + Live Mobile App</li>
+            <li><span class="xp-check">&#10003;</span> Interactive Leaflet &amp; OSRM fleet dispatch map</li>
+            <li><span class="xp-check">&#10003;</span> Merchant inventory, order fulfillment &amp; ledger control</li>
+            <li><span class="xp-check">&#10003;</span> Resizable workspace with multi-pane productivity</li>
+          </ul>
+        </div>
+        <div class="xp-btn-row">
+          <a href="/dual-console?view=split" class="xp-btn xp-btn-primary">
+            &#9878;&#65039; Launch Dual Console
+          </a>
+          <a href="/dual-console?view=admin" class="xp-btn xp-btn-outline">
+            &#127970; Admin Portal
+          </a>
+        </div>
+      </div>
+
+      <!-- Card 4: Instant Zero-Install Web App -->
+      <div class="xp-card">
+        <div>
+          <div class="xp-card-top">
+            <div class="xp-icon">&#9889;</div>
+            <span class="xp-badge">Zero Install</span>
+          </div>
+          <h3 class="xp-title">Instant Browser App on Any Device</h3>
+          <p class="xp-desc">
+            No installation or storage space needed. Open directly in Chrome, Safari, Edge, Firefox, or Samsung Internet with sub-second loading speeds.
+          </p>
+          <ul class="xp-features">
+            <li><span class="xp-check">&#10003;</span> 100% fluid responsive design (320px to 4K monitors)</li>
+            <li><span class="xp-check">&#10003;</span> Live Flutterwave payments (Cards, Bank Transfer, USSD)</li>
+            <li><span class="xp-check">&#10003;</span> Multi-vendor marketplace promenade &amp; cart checkout</li>
+            <li><span class="xp-check">&#10003;</span> Works on all smart devices with zero setup</li>
+          </ul>
+        </div>
+        <div class="xp-btn-row">
+          <a href="/dual-console" class="xp-btn xp-btn-primary">
+            &#128640; Launch Instant App
+          </a>
+          <a href="/invite-signup.html" class="xp-btn xp-btn-outline">
+            &#129309; Partner Portal
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </section>

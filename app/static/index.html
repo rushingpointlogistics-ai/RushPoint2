@@ -2,21 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <meta name="theme-color" content="#450A0A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>RushingPoint V1.0 — Marketplace & Logistics Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/static/css/maroon-theme.css">
+  <link rel="stylesheet" href="css/maroon-theme.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    html, body { height: 100%; overflow: hidden; }
-    #app-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-    .workspace-container { flex: 1; display: flex; overflow: hidden; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      min-height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #F4F5F7;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-text-size-adjust: 100%;
+      touch-action: manipulation;
+    }
+    #app-root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      height: 100dvh;
+      width: 100vw;
+      overflow: hidden;
+      position: relative;
+    }
+    .workspace-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
     .divider-handle {
       width: 6px;
-      background: var(--maroon-border);
+      background: var(--maroon-border, #FECACA);
       cursor: col-resize;
       display: flex;
       align-items: center;
@@ -25,36 +56,128 @@
       transition: background 0.15s;
       flex-shrink: 0;
     }
-    .divider-handle:hover { background: var(--maroon-primary); }
+    .divider-handle:hover { background: var(--maroon-primary, #B91C1C); }
     .divider-dots { display: flex; flex-direction: column; gap: 4px; }
-    .divider-dots span { width: 4px; height: 4px; background: var(--gray-600); border-radius: 50%; }
+    .divider-dots span { width: 4px; height: 4px; background: #6B7280; border-radius: 50%; }
     .admin-view-pane { flex: 1; height: 100%; overflow: hidden; min-width: 500px; }
-    .mobile-view-pane { width: 440px; height: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #E5E7EB; padding: 16px; }
-    .phone-mockup-frame { width: 370px; height: 740px; background: #FFF; border-radius: 40px; box-shadow: 0 0 0 12px #1F2937, 0 0 0 14px #374151, 0 25px 50px -12px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; position: relative; }
-    .app-screen-container { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-    .phone-notch { width: 130px; height: 22px; background: #1F2937; position: absolute; top: 0; left: 50%; transform: translateX(-50%); border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; z-index: 100; }
-    .phone-status-bar { height: 36px; background: #FFF; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 0.7rem; font-weight: 700; color: var(--gray-700); flex-shrink: 0; z-index: 50; }
+    .mobile-view-pane {
+      width: 440px;
+      height: 100%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #E5E7EB;
+      padding: 16px;
+      transition: width 0.2s ease;
+    }
+    .phone-mockup-frame {
+      width: 370px;
+      height: 740px;
+      background: #FFF;
+      border-radius: 40px;
+      box-shadow: 0 0 0 12px #1F2937, 0 0 0 14px #374151, 0 25px 50px -12px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    .app-screen-container {
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .phone-notch {
+      width: 130px;
+      height: 22px;
+      background: #1F2937;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      z-index: 100;
+    }
+    .phone-status-bar {
+      height: 36px;
+      background: #FFF;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #374151;
+      flex-shrink: 0;
+      z-index: 50;
+    }
 
-    /* NATIVE FULLSCREEN MOBILE OPTIMIZATION (<768px) */
-    @media (max-width: 768px) {
-      .master-header { display: none !important; }
-      .admin-view-pane { display: none !important; }
+    /* UNIVERSAL RESPONSIVE MOBILE VIEWPORT (<992px & Touch Devices) */
+    @media (max-width: 992px) {
+      .master-header {
+        height: 48px !important;
+        padding: 0 10px !important;
+        gap: 8px !important;
+      }
+      .master-header .brand-subtitle { display: none !important; }
+      .master-header .brand-title { font-size: 0.95rem !important; }
+      .master-header .auth-status-bar { display: none !important; }
+      .view-switcher-bar {
+        gap: 4px !important;
+      }
+      .view-switcher-bar .view-btn {
+        padding: 5px 9px !important;
+        font-size: 0.72rem !important;
+        border-radius: 8px !important;
+      }
+      #split-btn { display: none !important; } /* Dual split view is not applicable on phone screens */
+      
+      .admin-view-pane {
+        min-width: 0 !important;
+        width: 100% !important;
+      }
       .divider-handle { display: none !important; }
+      
       .mobile-view-pane {
         width: 100% !important;
         height: 100% !important;
         padding: 0 !important;
-        background: #FFFFFF !important;
+        background: #F4F5F7 !important;
+        flex: 1 !important;
       }
       .phone-mockup-frame {
         width: 100% !important;
+        max-width: 100% !important;
         height: 100% !important;
+        max-height: 100% !important;
         border-radius: 0 !important;
         box-shadow: none !important;
         border: none !important;
+        background: #F4F5F7 !important;
       }
       .phone-notch { display: none !important; }
       .phone-status-bar { display: none !important; }
+    }
+
+    /* STANDALONE / MOBILE-ONLY MODE (When viewing just the mobile app) */
+    body.standalone-mobile .master-header,
+    body.is-native-mobile .master-header {
+      height: 46px !important;
+      padding: 0 10px !important;
+    }
+    body.standalone-mobile .phone-mockup-frame,
+    body.is-native-mobile .phone-mockup-frame {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: 100% !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
     }
   </style>
 </head>
@@ -73,14 +196,17 @@
     </div>
 
     <div class="view-switcher-bar">
-      <button class="view-btn" id="admin-btn" onclick="setLayout('admin')">
-        <span>🏢</span> Admin Operations Portal
-      </button>
+      <a href="/" class="view-btn" style="text-decoration:none;display:inline-flex;align-items:center;color:inherit;">
+        <span>🏠</span> <span class="vbtn-label">Home</span>
+      </a>
       <button class="view-btn" id="mobile-btn" onclick="setLayout('mobile')">
-        <span>📱</span> Mobile App & Storefront
+        <span>📱</span> <span class="vbtn-label">Mobile Store</span>
+      </button>
+      <button class="view-btn" id="admin-btn" onclick="setLayout('admin')">
+        <span>🏢</span> <span class="vbtn-label">Admin Portal</span>
       </button>
       <button class="view-btn active" id="split-btn" onclick="setLayout('split')">
-        <span>⚖️</span> Dual Console View
+        <span>⚖️</span> <span class="vbtn-label">Dual Console</span>
       </button>
     </div>
 
@@ -264,29 +390,29 @@
   // ==========================================
   function setLayout(mode) {
     document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
-    document.getElementById(mode === "split" ? "split-btn" : mode === "admin" ? "admin-btn" : "mobile-btn").classList.add("active");
+    const btnId = mode === "split" ? "split-btn" : mode === "admin" ? "admin-btn" : "mobile-btn";
+    const activeBtn = document.getElementById(btnId);
+    if (activeBtn) activeBtn.classList.add("active");
     
     const adminPane = document.getElementById("admin-pane");
     const mobilePane = document.getElementById("mobile-pane");
     const divider = document.getElementById("divider");
     
     if (mode === "split") {
-      adminPane.style.display = "block";
-      mobilePane.style.display = "flex";
-      divider.style.display = "flex";
-      adminPane.style.flex = "1";
-      mobilePane.style.width = "440px";
+      document.body.classList.remove("standalone-mobile");
+      if (adminPane) { adminPane.style.display = "block"; adminPane.style.flex = "1"; adminPane.style.width = ""; }
+      if (mobilePane) { mobilePane.style.display = "flex"; mobilePane.style.width = "440px"; mobilePane.style.flex = "none"; }
+      if (divider) { divider.style.display = "flex"; }
     } else if (mode === "admin") {
-      adminPane.style.display = "block";
-      adminPane.style.flex = "1";
-      mobilePane.style.display = "none";
-      divider.style.display = "none";
-    } else {
-      adminPane.style.display = "none";
-      mobilePane.style.display = "flex";
-      mobilePane.style.width = "100%";
-      mobilePane.style.flex = "1";
-      divider.style.display = "none";
+      document.body.classList.remove("standalone-mobile");
+      if (adminPane) { adminPane.style.display = "block"; adminPane.style.flex = "1"; adminPane.style.width = "100%"; }
+      if (mobilePane) { mobilePane.style.display = "none"; }
+      if (divider) { divider.style.display = "none"; }
+    } else { // "mobile"
+      document.body.classList.add("standalone-mobile");
+      if (adminPane) { adminPane.style.display = "none"; }
+      if (mobilePane) { mobilePane.style.display = "flex"; mobilePane.style.width = "100%"; mobilePane.style.flex = "1"; }
+      if (divider) { divider.style.display = "none"; }
     }
   }
 
@@ -298,17 +424,19 @@
   const adminPane = document.getElementById("admin-pane");
   let isDragging = false;
 
-  divider.addEventListener("mousedown", () => { isDragging = true; document.body.style.cursor = "col-resize"; });
-  document.addEventListener("mouseup", () => { isDragging = false; document.body.style.cursor = ""; });
-  document.addEventListener("mousemove", e => {
-    if (!isDragging) return;
-    const rect = workspace.getBoundingClientRect();
-    const newWidth = e.clientX - rect.left;
-    if (newWidth > 400 && newWidth < rect.width - 440) {
-      adminPane.style.flex = "none";
-      adminPane.style.width = `${newWidth}px`;
-    }
-  });
+  if (divider) {
+    divider.addEventListener("mousedown", () => { isDragging = true; document.body.style.cursor = "col-resize"; });
+    document.addEventListener("mouseup", () => { isDragging = false; document.body.style.cursor = ""; });
+    document.addEventListener("mousemove", e => {
+      if (!isDragging || !workspace || !adminPane) return;
+      const rect = workspace.getBoundingClientRect();
+      const newWidth = e.clientX - rect.left;
+      if (newWidth > 400 && newWidth < rect.width - 440) {
+        adminPane.style.flex = "none";
+        adminPane.style.width = `${newWidth}px`;
+      }
+    });
+  }
 
   // ==========================================
   // LIVE CLOCK IN PHONE NOTCH
@@ -327,10 +455,27 @@
   // BOOT SEQUENCE
   // ==========================================
   document.addEventListener("DOMContentLoaded", async () => {
-    // If opened on phone or tablet screen, default to full mobile layout
-    if (window.innerWidth <= 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      setLayout("mobile");
+    // Detect mobile device or query param ?view=mobile / ?view=admin
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get("view");
+    const isMobileDevice = window.innerWidth <= 992 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobileDevice) {
+      document.body.classList.add("is-native-mobile");
     }
+
+    if (viewParam === "mobile") {
+      setLayout("mobile");
+    } else if (viewParam === "admin") {
+      setLayout("admin");
+    } else if (viewParam === "split") {
+      setLayout("split");
+    } else if (isMobileDevice) {
+      setLayout("mobile");
+    } else {
+      setLayout("split");
+    }
+
     updateHeaderAuthBar();
     MobileApp.init();
     

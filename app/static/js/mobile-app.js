@@ -41,8 +41,12 @@ const MobileApp = {
 
     const user = API.getUser();
     if (!user) {
+      container.style.overflow = "auto";
+      container.style.height = "100%";
       this.renderAuthScreen(container);
     } else {
+      container.style.overflow = "hidden";
+      container.style.height = "100%";
       this.activeRole = user.account_type;
       if (this.activeRole === "CUSTOMER") {
         this.renderCustomerApp(container, user);
@@ -302,7 +306,7 @@ const MobileApp = {
   // ==========================================
   renderAuthScreen(container) {
     container.innerHTML = `
-      <div style="padding: 24px 20px; display: flex; flex-direction: column; min-height: 100%; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
+      <div style="padding: 20px 18px calc(24px + env(safe-area-inset-bottom, 12px)); display: flex; flex-direction: column; min-height: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
         <div style="text-align: center; margin-top: 10px; margin-bottom: 12px;">
           <div style="max-width: 220px; margin: 0 auto 10px; padding: 6px 14px; background: rgba(255,255,255,0.96); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center;">
             <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 52px; width: auto; max-width: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));" alt="RushPoint Logistics">
