@@ -688,55 +688,211 @@ const AdminPortal = {
     } catch (e) {}
   },
 
-  showAdminWithdrawRiderModal(riderId, riderName, currentBalance) {
+  async showAdminWithdrawRiderModal(riderId, riderName, currentBalance) {
+    let banks = [];
+    try {
+      const bRes = await API.get("/api/finance/banks");
+      banks = bRes?.banks || [];
+    } catch (e) {}
+    if (!banks || banks.length === 0) {
+      banks = [
+        { code: "999992", name: "OPay (PayCom)", icon: "🔴" },
+        { code: "999991", name: "PalmPay", icon: "🌴" },
+        { code: "50515", name: "Moniepoint MFB", icon: "🔵" },
+        { code: "50211", name: "Kuda Bank", icon: "🟣" },
+        { code: "058", name: "Guaranty Trust Bank (GTBank)", icon: "🟧" },
+        { code: "057", name: "Zenith Bank", icon: "🔴" },
+        { code: "044", name: "Access Bank", icon: "🔶" },
+        { code: "011", name: "First Bank of Nigeria", icon: "🐘" },
+        { code: "033", name: "United Bank for Africa (UBA)", icon: "🔴" }
+      ];
+    }
+
     const modal = document.createElement("div");
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 400px; border-radius: 18px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-dark);">💸 Admin: Disburse Rider Commission</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+      <div class="modal-dialog" style="max-width: 480px; border-radius: 20px; overflow: hidden; padding: 0;">
+        <div style="background: linear-gradient(135deg, #065F46 0%, #059669 100%); color: #FFF; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.4rem;">💸</span>
+            <div>
+              <h3 style="font-size: 1.15rem; font-weight: 900; margin: 0;">Admin: Disburse Rider Earnings</h3>
+              <div style="font-size: 0.68rem; opacity: 0.9; font-weight: 700;">OPay Transfer & Emergency Disbursement for ${riderName}</div>
+            </div>
+          </div>
+          <button onclick="this.closest('.modal-backdrop').remove()" style="background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 30px; height: 30px; color: #FFF; font-size: 1.1rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="background: #FFF5F5; border: 1px solid #FECACA; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.75rem;">
-          <div>Rider: <strong>${riderName}</strong></div>
-          <div style="margin-top: 2px;">Earned Balance: <strong style="color: #B91C1C; font-size: 0.95rem;">₦${(currentBalance || 0).toLocaleString()}</strong></div>
-          <div style="font-size: 0.68rem; color: #64748B; margin-top: 4px;">Disburse funds to rider via direct bank transfer or cash due to feature-phone infrastructure.</div>
-        </div>
+        <div style="padding: 18px 20px; max-height: 82vh; overflow-y: auto;">
+          <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 12px; padding: 12px; margin-bottom: 14px; font-size: 0.78rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #166534; font-weight: 800;">Rider: <strong>${riderName}</strong></span>
+              <span style="color: #15803D; font-size: 1.15rem; font-weight: 900;">₦${(currentBalance || 0).toLocaleString()}</span>
+            </div>
+            <div style="font-size: 0.68rem; color: #64748B; margin-top: 4px;">
+              Disburse commission to rider's bank account or cash handover (for phone lost, stolen, damaged, or feature phones).
+            </div>
+          </div>
 
-        <form onsubmit="AdminPortal.executeAdminWithdrawRider(event, '${riderId}', ${currentBalance})">
-          <div class="rp-form-group">
-            <label class="rp-label">Disbursement Amount (NGN)</label>
-            <input type="number" id="adm-rdr-payout-amt" class="rp-input" value="${currentBalance}" max="${currentBalance}" min="100" required>
-          </div>
-          <div class="rp-form-group">
-            <label class="rp-label">Disbursement Channel / Notes</label>
-            <input type="text" id="adm-rdr-payout-channel" class="rp-input" value="Direct Bank Transfer / Cash Handover" required>
-          </div>
-          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px; background: #059669; font-weight: 800;">
-            Confirm Payout Disbursement 💸
-          </button>
-        </form>
+          <form onsubmit="AdminPortal.executeAdminWithdrawRider(event, '${riderId}', ${currentBalance})">
+            <input type="hidden" id="adm-rdr-account-name" value="">
+
+            <!-- Disbursement Method -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Method</label>
+              <div style="display: flex; gap: 8px;">
+                <label style="flex: 1; border: 1.5px solid #059669; background: #ECFDF5; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                  <input type="radio" name="adm-ind-payout-chan" value="BANK_TRANSFER" checked onchange="AdminPortal.toggleIndPayoutChannel('BANK_TRANSFER')">
+                  🏦 Bank / OPay Transfer
+                </label>
+                <label style="flex: 1; border: 1.5px solid #E2E8F0; background: #F8FAFC; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 800;">
+                  <input type="radio" name="adm-ind-payout-chan" value="CASH" onchange="AdminPortal.toggleIndPayoutChannel('CASH')">
+                  💵 Cash Handover
+                </label>
+              </div>
+            </div>
+
+            <!-- Bank Transfer Fields -->
+            <div id="adm-ind-bank-fields">
+              <div class="rp-form-group" style="margin-bottom: 10px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">Destination Bank</label>
+                <select id="adm-ind-bank-code" class="rp-select" onchange="AdminPortal.onAdminIndPayoutAccountTyped()" style="border-radius: 10px; font-weight: 700;">
+                  <option value="">-- Select Bank (OPay, PalmPay, Moniepoint, GTB...) --</option>
+                  ${banks.map(b => `<option value="${b.code}">${b.icon || '🏦'} ${b.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="rp-form-group" style="margin-bottom: 10px;">
+                <label class="rp-label" style="font-weight: 800; font-size: 0.74rem;">10-Digit NUBAN Account Number</label>
+                <input type="text" id="adm-ind-acc-num" class="rp-input" maxlength="10" placeholder="e.g. 8101234567 or 0123456789" oninput="AdminPortal.onAdminIndPayoutAccountTyped()" style="border-radius: 10px; font-size: 1.1rem; font-weight: 800; letter-spacing: 1px;">
+              </div>
+
+              <div id="adm-ind-verified-badge" style="display: none; border-radius: 10px; border: 1.5px solid #86EFAC; padding: 10px 12px; margin-bottom: 12px; font-size: 0.76rem;"></div>
+            </div>
+
+            <!-- Amount -->
+            <div class="rp-form-group" style="margin-bottom: 12px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Disbursement Amount (NGN)</label>
+              <input type="number" id="adm-rdr-payout-amt" class="rp-input" value="${currentBalance}" max="${currentBalance}" min="100" required style="border-radius: 10px; font-size: 1.1rem; font-weight: 800;">
+            </div>
+
+            <!-- Memo -->
+            <div class="rp-form-group" style="margin-bottom: 14px;">
+              <label class="rp-label" style="font-weight: 800; font-size: 0.76rem;">Memo / Receipt Note</label>
+              <input type="text" id="adm-rdr-payout-note" class="rp-input" value="Disbursed by Admin to ${riderName}" required style="border-radius: 10px;">
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 16px;">
+              <button type="button" onclick="this.closest('.modal-backdrop').remove()" class="btn-secondary" style="flex: 1; justify-content: center; border-radius: 12px;">
+                Cancel
+              </button>
+              <button type="submit" id="adm-ind-submit-btn" class="btn-primary" style="flex: 2; justify-content: center; background: #059669; border-color: #047857; font-weight: 800; border-radius: 12px; padding: 12px;">
+                💸 Disburse Payout Now
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);
   },
 
+  toggleIndPayoutChannel(chan) {
+    const fields = document.getElementById("adm-ind-bank-fields");
+    const note = document.getElementById("adm-rdr-payout-note");
+    if (fields) fields.style.display = (chan === "CASH") ? "none" : "block";
+    if (note) note.value = (chan === "CASH") ? "Cash Handover at Hub Counter" : "Direct Bank Transfer Payout";
+  },
+
+  async onAdminIndPayoutAccountTyped() {
+    const accInput = document.getElementById("adm-ind-acc-num");
+    const bankSelect = document.getElementById("adm-ind-bank-code");
+    const badge = document.getElementById("adm-ind-verified-badge");
+    const nameInput = document.getElementById("adm-rdr-account-name");
+    const submitBtn = document.getElementById("adm-ind-submit-btn");
+
+    if (!accInput || !bankSelect || !badge) return;
+    const accNum = accInput.value.replace(/\D/g, '').slice(0, 10);
+    accInput.value = accNum;
+    const bankCode = bankSelect.value;
+
+    if (accNum.length < 10 || !bankCode) {
+      badge.style.display = "none";
+      if (nameInput) nameInput.value = "";
+      return;
+    }
+
+    badge.style.display = "block";
+    badge.style.background = "#EFF6FF";
+    badge.style.borderColor = "#93C5FD";
+    badge.style.color = "#1D4ED8";
+    badge.innerHTML = `🔄 Resolving account name via NIBSS / Bank API...`;
+
+    try {
+      const res = await API.post("/api/finance/resolve-account", {
+        account_number: accNum,
+        bank_code: bankCode
+      });
+      if (res && res.success && res.account_name) {
+        badge.style.background = "#ECFDF5";
+        badge.style.borderColor = "#86EFAC";
+        badge.style.color = "#065F46";
+        badge.innerHTML = `
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 6px;">
+            <span>✅</span> <span>VERIFIED RECIPIENT:</span>
+          </div>
+          <div style="font-size: 0.95rem; font-weight: 900; letter-spacing: 0.5px; margin-top: 2px;">${res.account_name}</div>
+          <div style="font-size: 0.65rem; color: #047857; margin-top: 2px;">${res.bank_name} • Instant Transfer Ready</div>
+        `;
+        if (nameInput) nameInput.value = res.account_name;
+        if (submitBtn) submitBtn.textContent = `💸 Disburse to ${res.account_name.split(' ')[0]}`;
+      }
+    } catch (e) {
+      badge.style.background = "#FEF2F2";
+      badge.style.borderColor = "#FECACA";
+      badge.style.color = "#991B1B";
+      badge.innerHTML = `⚠️ Could not verify account. Please check the 10 digits.`;
+    }
+  },
+
   async executeAdminWithdrawRider(e, riderId, maxBalance) {
     e.preventDefault();
     const amount = parseFloat(document.getElementById("adm-rdr-payout-amt").value);
-    const bank_account = document.getElementById("adm-rdr-payout-channel").value.trim();
+    const channelRadio = document.querySelector('input[name="adm-ind-payout-chan"]:checked');
+    const payout_channel = channelRadio ? channelRadio.value : "BANK_TRANSFER";
+    const bankSelect = document.getElementById("adm-ind-bank-code");
+    const bank_code = bankSelect ? bankSelect.value : "";
+    const bank_name = bankSelect ? bankSelect.options[bankSelect.selectedIndex]?.text : "";
+    const account_number = document.getElementById("adm-ind-acc-num")?.value.trim() || "";
+    const account_name = document.getElementById("adm-rdr-account-name")?.value.trim() || "";
+    const notes = document.getElementById("adm-rdr-payout-note")?.value.trim() || "";
+
     if (!amount || amount <= 0 || amount > maxBalance) {
       API.showToast("Invalid disbursement amount", "error");
       return;
     }
+
+    const btn = document.getElementById("adm-ind-submit-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Disbursing Funds… ⏳"; }
+
     try {
-      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, { amount, bank_account });
+      const res = await API.post(`/api/admin/riders/${riderId}/withdraw-on-behalf`, {
+        amount,
+        payout_channel,
+        bank_code,
+        bank_name,
+        account_number,
+        account_name,
+        notes
+      });
       document.querySelector(".rp-modal-overlay")?.remove();
-      API.showToast(res.message, "success");
+      API.showToast(res.message || "Payout disbursed successfully!", "success");
       this.render();
       if (window.MobileApp) window.MobileApp.render();
-    } catch (err) {}
+    } catch (err) {
+      API.showToast(err.message || "Payout disbursement failed", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "💸 Disburse Payout Now"; }
+    }
   },
 
   showStoreDeliveryFeeModal(storeId, storeName, currentFee) {

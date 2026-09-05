@@ -417,18 +417,63 @@ def request_wallet_payout(payload: dict, current_user: dict = Depends(get_curren
     conn.commit()
     conn.close()
     
+    # Call Flutterwave Live Transfers API to disburse funds to recipient bank account
+    flw_transfer_id = None
+    flw_status = "PENDING"
+    creds = get_flw_credentials()
+    flw_secret = creds.get("secret_key")
+    bank_code = str(payload.get("bank_code", "")).strip()
+    if not bank_code and bank_name:
+        matched = next((b for b in NIGERIAN_BANKS if b["name"].lower() in bank_name.lower() or bank_name.lower() in b["name"].lower()), None)
+        if matched:
+            bank_code = matched["code"]
+
+    if flw_secret and account_number and bank_code:
+        try:
+            flw_payout_payload = {
+                "account_bank": bank_code,
+                "account_number": account_number,
+                "amount": amount,
+                "narration": f"RushPoint Payout to {account_name or current_user.get('full_name', 'User')}",
+                "currency": "NGN",
+                "reference": tx_ref,
+                "callback_url": "https://rushingpoint.com/api/finance/webhook/flutterwave",
+                "debit_currency": "NGN"
+            }
+            res = http_requests.post(
+                "https://api.flutterwave.com/v3/transfers",
+                json=flw_payout_payload,
+                headers={
+                    "Authorization": f"Bearer {flw_secret}",
+                    "Content-Type": "application/json"
+                },
+                timeout=12
+            )
+            if res.status_code in (200, 201):
+                res_data = res.json()
+                if res_data.get("status") == "success":
+                    flw_transfer_id = res_data.get("data", {}).get("id")
+                    flw_status = res_data.get("data", {}).get("status", "SUCCESSFUL")
+        except Exception:
+            pass
+
     return {
         "success": True,
         "message": f"Transfer of ₦{amount:,.2f} to {account_name or bank_name} ({account_number}) initiated successfully.",
         "new_balance": new_balance,
         "reference": tx_ref,
+        "transfer_id": flw_transfer_id,
+        "gateway_status": flw_status,
         "transfer_details": {
             "amount": amount,
             "fee": 0.0,
             "bank_name": bank_name,
+            "bank_code": bank_code,
             "account_number": account_number,
             "account_name": account_name,
             "reference": tx_ref,
+            "transfer_id": flw_transfer_id,
+            "status": flw_status,
             "timestamp": now_iso
         }
     }
