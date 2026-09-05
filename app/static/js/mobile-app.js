@@ -2117,28 +2117,7 @@ const MobileApp = {
     } catch (e) {}
   },
 
-  showTopUpModal(currentBal) {
-    const modal = document.createElement("div");
-    modal.className = "modal-backdrop rp-modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 320px; border-radius: 20px;">
-        <div class="modal-header">
-          <h3 style="font-size: 1rem; font-weight: 800; color: #1E293B;">💳 Top Up Wallet</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
-        </div>
-        <div style="font-size: 0.78rem; margin-bottom: 12px;">Current Balance: <strong style="color: #B91C1C;">₦${currentBal.toLocaleString()}</strong></div>
-        <div class="rp-form-group">
-          <label class="rp-label">Deposit Amount (NGN)</label>
-          <input type="number" id="topup-amount" class="rp-input" placeholder="e.g. 5000" min="100" step="500" style="border-radius: 10px;">
-        </div>
-        <div style="font-size: 0.72rem; color: #64748B; margin-bottom: 12px;">🔒 Real live payment powered by Flutterwave (Debit Card, Bank Transfer, USSD).</div>
-        <button onclick="MobileApp.executeTopUp()" class="btn-primary" style="width: 100%; justify-content: center; padding: 11px; border-radius: 12px; background: #B91C1C; font-weight: 800;">
-          Pay with Flutterwave 💳
-        </button>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  },
+
 
   async executeTopUp() {
     const amt = parseFloat(document.getElementById("topup-amount").value);
