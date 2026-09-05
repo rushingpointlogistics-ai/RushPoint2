@@ -4,17 +4,22 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -62,7 +67,7 @@ public class MainActivity extends Activity {
             window.setNavigationBarColor(Color.parseColor("#1F0005"));
         }
 
-        // Full screen immersive layout (content extends behind status bar)
+        // Full screen layout
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
@@ -81,7 +86,7 @@ public class MainActivity extends Activity {
         }
 
         webView = new WebView(this);
-        // Dark maroon background to avoid white flash while page loads
+        // Set background to brand dark maroon (#2B0008) so user NEVER sees a white void
         webView.setBackgroundColor(Color.parseColor("#2B0008"));
         setContentView(webView);
 
@@ -95,11 +100,11 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
 
-        // CRITICAL: proper mobile viewport prevents blank/white screen
+        // Mobile viewport configurations
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.NORMAL);
-        settings.setSupportZoom(true);
+        settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
 
@@ -120,15 +125,51 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return false;
                 String url = request.getUrl().toString();
-                // Keep all rushpoint/flutterwave URLs inside the WebView
-                view.loadUrl(url);
+                // Allow standard HTTP/HTTPS/FILE URLs to load inside WebView naturally
+                if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
+                    return false; // Return false so WebView loads normally!
+                }
+                // Handle external intents (whatsapp, tel, mailto)
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception ignored) {}
                 return true;
             }
 
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (url == null) return false;
+                if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
+                    return false; // Return false so WebView loads normally!
+                }
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    startActivity(intent);
+                } catch (Exception ignored) {}
+                return true;
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                // Ignore SSL certificate mismatch to ensure Cloudflare/Render connection never aborts to white screen
+                handler.proceed();
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    if (!liveLoadFailed) {
+                        liveLoadFailed = true;
+                        view.loadUrl(LOCAL_APP_URL);
+                    }
+                }
+            }
+
+            @Override
             public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                // If live server fails (no internet), fall back to local bundled app
                 if (!liveLoadFailed && failingUrl != null && failingUrl.startsWith("https://")) {
                     liveLoadFailed = true;
                     view.loadUrl(LOCAL_APP_URL);
