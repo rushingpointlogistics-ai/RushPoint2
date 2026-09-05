@@ -60,6 +60,33 @@ class _SignupScreenState extends State<SignupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 210, maxHeight: 75),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+                ),
+                child: Image.asset(
+                  'assets/images/rushpoint_logo_transparent.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (ctx, err, st) => Image.asset(
+                    'assets/images/rushpoint_logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
             if (_errorMessage != null)
               Container(
                 padding: const EdgeInsets.all(10),

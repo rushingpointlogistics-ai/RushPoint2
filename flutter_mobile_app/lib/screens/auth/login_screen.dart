@@ -121,59 +121,54 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // App Brand Logo with crisp white background
+                  // App Brand Logo from signup screen with ultra-professional styling
                   Container(
-                    width: 78,
-                    height: 78,
-                    padding: const EdgeInsets.all(6),
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxWidth: 240, maxHeight: 85),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(22),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.28),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 22,
+                          offset: const Offset(0, 8),
                         ),
                       ],
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
                     ),
                     child: Image.asset(
-                      'assets/images/rushpoint_logo_badge.png',
+                      'assets/images/rushpoint_logo_transparent.png',
                       fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) => const Center(
-                        child: Text(
-                          'RP',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF881337),
-                            letterSpacing: 1,
+                      errorBuilder: (context, error, stackTrace) => Image.asset(
+                        'assets/images/rushpoint_logo.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (ctx, err, st) => const Center(
+                          child: Text(
+                            'RushPoint',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF7F1D1D),
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'RushPoint',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 14),
                   const Text(
                     'Every Delivery, On Point.',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: Color(0xFFFECDD3),
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.6,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
                   // Role Hint Chips (Fast switcher for Customer, Vendor, Rider)
                   Container(

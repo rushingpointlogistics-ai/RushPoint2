@@ -303,12 +303,11 @@ const MobileApp = {
   renderAuthScreen(container) {
     container.innerHTML = `
       <div style="padding: 24px 20px; display: flex; flex-direction: column; min-height: 100%; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
-        <div style="text-align: center; margin-top: 10px; margin-bottom: 8px;">
-          <div style="width: 72px; height: 72px; background: #FFFFFF; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; padding: 5px; box-shadow: 0 8px 25px rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.3);">
-            <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="width: 100%; height: 100%; object-fit: contain;" alt="RushPoint">
+        <div style="text-align: center; margin-top: 10px; margin-bottom: 12px;">
+          <div style="max-width: 220px; margin: 0 auto 10px; padding: 6px 14px; background: rgba(255,255,255,0.96); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 52px; width: auto; max-width: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));" alt="RushPoint Logistics">
           </div>
-          <h1 style="font-size: 1.6rem; font-weight: 900; letter-spacing: -0.5px; margin: 0; color: #FFF;">RushPoint</h1>
-          <p style="font-size: 0.72rem; font-weight: 600; opacity: 0.9; color: #FECDD3; letter-spacing: 0.5px; margin-top: 2px;">Every Delivery, On Point.</p>
+          <p style="font-size: 0.75rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 0;">Every Delivery, On Point.</p>
         </div>
 
         <!-- Role Quick-Switcher Chips -->
@@ -430,8 +429,10 @@ const MobileApp = {
     modal.className = "modal-backdrop rp-modal-overlay";
     modal.innerHTML = `
       <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
-        <div style="text-align: center; padding-top: 8px;">
-          <img src="/static/img/rushpoint-logo-white-badge.png" onerror="this.onerror=null;this.src='img/rushpoint-logo.png'" style="height: 54px; width: 54px; border-radius: 14px; object-fit: contain; margin: 0 auto 8px; display: block; background: #FFFFFF; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);" alt="RushPoint">
+        <div style="text-align: center; padding-top: 10px; margin-bottom: 8px;">
+          <div style="max-width: 190px; margin: 0 auto; padding: 4px 10px; background: rgba(255,255,255,0.95); border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); border: 1px solid #F1F5F9; display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 44px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
+          </div>
         </div>
         <div class="modal-header" style="padding-top: 0;">
           <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-primary);">🛍️ Create Customer Account</h3>
