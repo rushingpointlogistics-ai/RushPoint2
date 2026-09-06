@@ -304,34 +304,129 @@ const MobileApp = {
   // ==========================================
   // UNIFIED ROOT LOGIN & SIGNUP SCREEN
   // ==========================================
+  authMode: "signin", // "signin" | "signup"
+  loginRole: "CUSTOMER", // "CUSTOMER" | "VENDOR" | "RIDER"
+
+  switchAuthMode(mode) {
+    this.authMode = mode;
+    const signinTab = document.getElementById("auth-tab-signin");
+    const signupTab = document.getElementById("auth-tab-signup");
+    const signinPanel = document.getElementById("auth-panel-signin");
+    const signupPanel = document.getElementById("auth-panel-signup");
+
+    if (mode === "signup") {
+      if (signinTab) { signinTab.style.background = "transparent"; signinTab.style.color = "#FECDD3"; }
+      if (signupTab) { signupTab.style.background = "#881337"; signupTab.style.color = "#FFF"; }
+      if (signinPanel) signinPanel.style.display = "none";
+      if (signupPanel) signupPanel.style.display = "block";
+    } else {
+      if (signinTab) { signinTab.style.background = "#881337"; signinTab.style.color = "#FFF"; }
+      if (signupTab) { signupTab.style.background = "transparent"; signupTab.style.color = "#FECDD3"; }
+      if (signinPanel) signinPanel.style.display = "block";
+      if (signupPanel) signupPanel.style.display = "none";
+    }
+  },
+
+  selectLoginRole(role) {
+    this.loginRole = role;
+    const tCust = document.getElementById("tab-role-cust");
+    const tVnd = document.getElementById("tab-role-vnd");
+    const tRdr = document.getElementById("tab-role-rdr");
+    const roleBadge = document.getElementById("mob-role-badge");
+    const submitBtn = document.getElementById("mob-login-submit");
+    const loginLabel = document.getElementById("mob-login-label");
+    const loginInput = document.getElementById("mob-login-input");
+
+    [tCust, tVnd, tRdr].forEach(t => {
+      if (t) {
+        t.style.background = "#F8FAFC";
+        t.style.color = "#475569";
+        t.style.border = "1.5px solid #E2E8F0";
+      }
+    });
+
+    if (role === "CUSTOMER") {
+      if (tCust) { tCust.style.background = "#881337"; tCust.style.color = "#FFF"; tCust.style.border = "1.5px solid #881337"; }
+      if (roleBadge) roleBadge.innerHTML = "🛍️ Customer Portal";
+      if (loginLabel) loginLabel.textContent = "Customer Email or Phone";
+      if (loginInput) loginInput.placeholder = "e.g. customer@rushingpoint.com";
+      if (submitBtn) submitBtn.innerHTML = "Sign In as Customer 🛍️";
+    } else if (role === "VENDOR") {
+      if (tVnd) { tVnd.style.background = "#881337"; tVnd.style.color = "#FFF"; tVnd.style.border = "1.5px solid #881337"; }
+      if (roleBadge) roleBadge.innerHTML = "🏪 Vendor Merchant Portal";
+      if (loginLabel) loginLabel.textContent = "Merchant Store Email or Phone";
+      if (loginInput) loginInput.placeholder = "e.g. almusik@rushingpoint.com";
+      if (submitBtn) submitBtn.innerHTML = "Sign In as Vendor 🏪";
+    } else if (role === "RIDER") {
+      if (tRdr) { tRdr.style.background = "#881337"; tRdr.style.color = "#FFF"; tRdr.style.border = "1.5px solid #881337"; }
+      if (roleBadge) roleBadge.innerHTML = "🏍️ Courier Dispatch Portal";
+      if (loginLabel) loginLabel.textContent = "Courier Rider Email or Phone";
+      if (loginInput) loginInput.placeholder = "e.g. rider.internal.moto@rushingpoint.com";
+      if (submitBtn) submitBtn.innerHTML = "Sign In as Courier 🏍️";
+    }
+  },
+
   renderAuthScreen(container) {
     container.innerHTML = `
-      <div style="padding: 24px 20px calc(32px + env(safe-area-inset-bottom, 16px)); display: flex; flex-direction: column; min-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; justify-content: center; gap: 20px; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
+      <div style="padding: 24px 18px calc(32px + env(safe-area-inset-bottom, 16px)); display: flex; flex-direction: column; min-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; justify-content: center; gap: 16px; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
 
-        <!-- Logo -->
-        <div style="text-align: center; padding-top: env(safe-area-inset-top, 12px);">
-          <div style="max-width: 240px; margin: 0 auto 10px; padding: 10px 18px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 12px 35px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;">
-            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 56px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
+        <!-- Brand Logo -->
+        <div style="text-align: center; padding-top: env(safe-area-inset-top, 8px);">
+          <div style="max-width: 220px; margin: 0 auto 8px; padding: 10px 18px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 12px 35px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 52px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
           </div>
-          <p style="font-size: 0.8rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 6px 0 0;">Every Delivery, On Point.</p>
+          <p style="font-size: 0.78rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 4px 0 0;">Every Delivery, On Point.</p>
         </div>
 
-        <!-- Login Card -->
-        <div style="background: #FFFFFF; border-radius: 24px; padding: 24px 22px; color: #0F172A; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <h2 style="font-size: 1.2rem; font-weight: 900; color: #881337; margin: 0;">Sign In</h2>
-            <span style="font-size: 0.65rem; background: #F0FDF4; color: #059669; border: 1px solid #BBF7D0; padding: 3px 9px; border-radius: 8px; font-weight: 800;">🔒 256-Bit SSL</span>
+        <!-- Mode Segmented Tabs: Sign In vs Sign Up -->
+        <div style="display: flex; gap: 6px; background: rgba(255,255,255,0.1); padding: 4px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18);">
+          <button type="button" id="auth-tab-signin" onclick="MobileApp.switchAuthMode('signin')"
+            style="flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-size: 0.82rem; font-weight: 800; cursor: pointer; background: #881337; color: #FFF; transition: all 0.2s; font-family: inherit;">
+            🔐 Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" onclick="MobileApp.switchAuthMode('signup')"
+            style="flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-size: 0.82rem; font-weight: 800; cursor: pointer; background: transparent; color: #FECDD3; transition: all 0.2s; font-family: inherit;">
+            ✨ Create Account
+          </button>
+        </div>
+
+        <!-- =================== PANEL 1: SIGN IN =================== -->
+        <div id="auth-panel-signin" style="background: #FFFFFF; border-radius: 24px; padding: 22px 20px; color: #0F172A; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h2 style="font-size: 1.15rem; font-weight: 900; color: #881337; margin: 0;">Sign In</h2>
+              <span id="mob-role-badge" style="font-size: 0.68rem; font-weight: 800; color: #64748B;">🛍️ Customer Portal</span>
+            </div>
+            <span style="font-size: 0.62rem; background: #F0FDF4; color: #059669; border: 1px solid #BBF7D0; padding: 3px 8px; border-radius: 8px; font-weight: 800;">🔒 256-Bit SSL</span>
           </div>
-          <p style="font-size: 0.73rem; color: #64748B; margin-bottom: 16px;">Enter your registered email or phone number to continue</p>
+
+          <!-- Role Selector: Customer / Vendor / Courier -->
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 0.72rem; font-weight: 800; color: #64748B; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Select Your Account Type:</label>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" id="tab-role-cust" onclick="MobileApp.selectLoginRole('CUSTOMER')"
+                style="flex: 1; padding: 8px 4px; border: 1.5px solid #881337; border-radius: 10px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: #881337; color: #FFF; transition: all 0.15s; font-family: inherit;">
+                🛍️ Customer
+              </button>
+              <button type="button" id="tab-role-vnd" onclick="MobileApp.selectLoginRole('VENDOR')"
+                style="flex: 1; padding: 8px 4px; border: 1.5px solid #E2E8F0; border-radius: 10px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: #F8FAFC; color: #475569; transition: all 0.15s; font-family: inherit;">
+                🏪 Vendor
+              </button>
+              <button type="button" id="tab-role-rdr" onclick="MobileApp.selectLoginRole('RIDER')"
+                style="flex: 1; padding: 8px 4px; border: 1.5px solid #E2E8F0; border-radius: 10px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: #F8FAFC; color: #475569; transition: all 0.15s; font-family: inherit;">
+                🏍️ Courier
+              </button>
+            </div>
+          </div>
 
           <div id="mob-login-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 10px 12px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 12px; font-weight: 600; line-height: 1.4;"></div>
 
           <form id="mobile-login-form" onsubmit="MobileApp.handleLogin(event)">
             <div style="margin-bottom: 14px;">
-              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Email Address or Phone</label>
-              <input type="text" id="mob-login-input" autocomplete="username" placeholder="Enter your email or phone number" required
+              <label id="mob-login-label" style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Customer Email or Phone</label>
+              <input type="text" id="mob-login-input" autocomplete="username" placeholder="e.g. customer@rushingpoint.com" required
                 oninput="document.getElementById('mob-login-error').style.display='none'"
-                style="width: 100%; padding: 13px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                style="width: 100%; padding: 12px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
                 onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
             </div>
 
@@ -339,27 +434,75 @@ const MobileApp = {
               <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Password</label>
               <input type="password" id="mob-pwd-input" autocomplete="current-password" placeholder="Enter your password" required
                 oninput="document.getElementById('mob-login-error').style.display='none'"
-                style="width: 100%; padding: 13px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                style="width: 100%; padding: 12px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
                 onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
             </div>
 
             <button type="submit" id="mob-login-submit"
-              style="width: 100%; padding: 14px; border: none; border-radius: 14px; background: linear-gradient(135deg, #881337, #B91C1C); color: #FFF; font-size: 0.95rem; font-weight: 900; cursor: pointer; box-shadow: 0 4px 16px rgba(136,19,55,0.4); font-family: inherit;">
-              Sign In to Account 🔐
+              style="width: 100%; padding: 13px; border: none; border-radius: 14px; background: linear-gradient(135deg, #881337, #B91C1C); color: #FFF; font-size: 0.92rem; font-weight: 900; cursor: pointer; box-shadow: 0 4px 16px rgba(136,19,55,0.35); font-family: inherit;">
+              Sign In as Customer 🛍️
             </button>
           </form>
+
+          <div style="text-align: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid #F1F5F9;">
+            <span style="font-size: 0.72rem; color: #64748B;">New customer? </span>
+            <button type="button" onclick="MobileApp.switchAuthMode('signup')" style="background: none; border: none; color: #881337; font-weight: 800; font-size: 0.72rem; cursor: pointer; text-decoration: underline; font-family: inherit;">
+              Create your free account ✨
+            </button>
+          </div>
         </div>
 
-        <!-- Sign Up -->
-        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 18px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <div style="font-size: 0.82rem; font-weight: 800; color: #FFF;">🛍️ New to RushPoint?</div>
-            <div style="font-size: 0.66rem; color: #FECDD3; margin-top: 2px;">Create a free customer account</div>
+        <!-- =================== PANEL 2: CUSTOMER SIGN UP =================== -->
+        <div id="auth-panel-signup" style="display: none; background: #FFFFFF; border-radius: 24px; padding: 22px 20px; color: #0F172A; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <h2 style="font-size: 1.15rem; font-weight: 900; color: #881337; margin: 0;">🛍️ Create Account</h2>
+            <span style="font-size: 0.62rem; background: #F0FDF4; color: #059669; border: 1px solid #BBF7D0; padding: 3px 8px; border-radius: 8px; font-weight: 800;">Free & Instant</span>
           </div>
-          <button onclick="MobileApp.showCustomerSignupModal()"
-            style="background: #FFF; color: #881337; border: none; font-weight: 900; padding: 8px 16px; border-radius: 10px; font-size: 0.78rem; cursor: pointer; font-family: inherit; white-space: nowrap;">
-            Sign Up ✨
-          </button>
+          <p style="font-size: 0.72rem; color: #64748B; margin-bottom: 14px;">Join RushPoint to shop from local stalls, order food, and send parcels.</p>
+
+          <div id="cust-signup-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 10px 12px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 12px; font-weight: 600; line-height: 1.4;"></div>
+
+          <form id="mobile-signup-form" onsubmit="MobileApp.handleCustomerSignup(event)">
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 5px;">Full Name</label>
+              <input type="text" id="cust-name" placeholder="e.g. Fatima Abubakar" required
+                style="width: 100%; padding: 11px 13px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.85rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 5px;">Email Address</label>
+              <input type="email" id="cust-email" placeholder="e.g. fatima@mail.com" required
+                style="width: 100%; padding: 11px 13px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.85rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 5px;">Phone Number (Mobile)</label>
+              <input type="tel" id="cust-phone" placeholder="e.g. 08031234567" required
+                style="width: 100%; padding: 11px 13px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.85rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 5px;">Password (Minimum 6 characters)</label>
+              <input type="password" id="cust-pwd" placeholder="••••••••" required minlength="6"
+                style="width: 100%; padding: 11px 13px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.85rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
+            </div>
+
+            <button type="submit" id="btn-cust-submit"
+              style="width: 100%; padding: 13px; border: none; border-radius: 14px; background: linear-gradient(135deg, #059669, #047857); color: #FFF; font-size: 0.92rem; font-weight: 900; cursor: pointer; box-shadow: 0 4px 16px rgba(5,150,105,0.35); font-family: inherit;">
+              Create Customer Account 🚀
+            </button>
+          </form>
+
+          <div style="text-align: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid #F1F5F9;">
+            <span style="font-size: 0.72rem; color: #64748B;">Already registered? </span>
+            <button type="button" onclick="MobileApp.switchAuthMode('signin')" style="background: none; border: none; color: #881337; font-weight: 800; font-size: 0.72rem; cursor: pointer; text-decoration: underline; font-family: inherit;">
+              Sign In to Account 🔐
+            </button>
+          </div>
         </div>
 
         <p style="text-align: center; font-size: 0.62rem; color: #64748B; margin: 0; padding-bottom: env(safe-area-inset-bottom, 8px);">RushPoint Logistics • PCI-DSS Certified Gateway • V1.0</p>
@@ -367,97 +510,13 @@ const MobileApp = {
     `;
   },
 
-  // fillDemoLogin is retained as a no-op — demo auto-fill is disabled for production
+  // Backward compatibility alias
   fillDemoLogin(role) {
-    // Production app: do not auto-fill any credentials
+    this.selectLoginRole(role);
   },
-
-  async handleLogin(e) {
-    e.preventDefault();
-    const login = document.getElementById("mob-login-input").value.trim();
-    const password = document.getElementById("mob-pwd-input").value;
-    const btn = document.getElementById("mob-login-submit");
-    const errBox = document.getElementById("mob-login-error");
-
-    if (errBox) errBox.style.display = "none";
-    if (btn) { btn.disabled = true; btn.textContent = "Signing in… 🔐"; }
-
-    try {
-      const res = await API.post("/api/auth/login", { login, password });
-      API.setToken(res.token);
-      API.setUser(res.user);
-      if (res.wallet) localStorage.setItem("rp_wallet", JSON.stringify(res.wallet));
-      API.showToast(`Welcome back, ${res.user.full_name}!`, "success");
-      
-      if (typeof updateHeaderAuthBar === "function") updateHeaderAuthBar();
-      this.render();
-      if (window.AdminPortal && (res.user.account_type === "ADMIN" || res.user.account_type === "STAFF")) {
-        window.AdminPortal.init();
-      }
-    } catch (err) {
-      const msg = err?.detail || err?.message || "Invalid credentials. Incorrect email/phone or password.";
-      if (errBox) {
-        errBox.innerHTML = `⚠️ <strong>Sign-in Failed:</strong> ${msg}`;
-        errBox.style.display = "block";
-      }
-      API.showToast(`❌ ${msg}`, "error");
-      if (btn) { btn.disabled = false; btn.textContent = "Sign In to Account 🔐"; }
-    }
-  },
-
-  signupPhoneVerified: false,
-  signupVerifiedPhone: "",
-  signupOtpCode: "",
 
   showCustomerSignupModal() {
-    const modal = document.createElement("div");
-    modal.className = "modal-backdrop rp-modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-dialog" style="max-width: 380px; border-radius: 20px;">
-        <div style="text-align: center; padding-top: 10px; margin-bottom: 8px;">
-          <div style="max-width: 190px; margin: 0 auto; padding: 4px 10px; background: rgba(255,255,255,0.95); border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); border: 1px solid #F1F5F9; display: flex; align-items: center; justify-content: center;">
-            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 44px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
-          </div>
-        </div>
-        <div class="modal-header" style="padding-top: 0;">
-          <h3 style="font-size: 1.05rem; font-weight: 800; color: var(--blood-primary);">🛍️ Create Customer Account</h3>
-          <button onclick="this.closest('.modal-backdrop').remove()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
-        </div>
-
-        <div style="font-size: 0.75rem; color: #64748B; margin-bottom: 12px;">
-          Join RushPoint to order products, book instant courier dispatch, and track deliveries.
-        </div>
-
-        <div id="cust-signup-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 8px 10px; border-radius: 8px; font-size: 0.72rem; margin-bottom: 10px; font-weight: 600;"></div>
-
-        <form onsubmit="MobileApp.handleCustomerSignup(event)">
-          <div class="rp-form-group">
-            <label class="rp-label">Full Name</label>
-            <input type="text" id="cust-name" class="rp-input" placeholder="e.g. John Doe" required>
-          </div>
-
-          <div class="rp-form-group">
-            <label class="rp-label">Email Address</label>
-            <input type="email" id="cust-email" class="rp-input" placeholder="e.g. john@mail.com" required>
-          </div>
-
-          <div class="rp-form-group">
-            <label class="rp-label">Phone Number</label>
-            <input type="tel" id="cust-phone" class="rp-input" placeholder="+2348012345678" required>
-          </div>
-
-          <div class="rp-form-group">
-            <label class="rp-label">Password</label>
-            <input type="password" id="cust-pwd" class="rp-input" placeholder="Minimum 6 characters" required minlength="6">
-          </div>
-
-          <button type="submit" id="btn-cust-submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 6px; font-weight: 800; border-radius: 12px;">
-            Create Customer Account 🚀
-          </button>
-        </form>
-      </div>
-    `;
-    document.body.appendChild(modal);
+    this.switchAuthMode("signup");
   },
 
   async handleCustomerSignup(e) {
