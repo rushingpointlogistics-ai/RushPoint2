@@ -306,89 +306,70 @@ const MobileApp = {
   // ==========================================
   renderAuthScreen(container) {
     container.innerHTML = `
-      <div style="padding: 20px 18px calc(24px + env(safe-area-inset-bottom, 12px)); display: flex; flex-direction: column; min-height: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; justify-content: space-between; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
-        <div style="text-align: center; margin-top: 10px; margin-bottom: 12px;">
-          <div style="max-width: 220px; margin: 0 auto 10px; padding: 6px 14px; background: rgba(255,255,255,0.96); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center;">
-            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 52px; width: auto; max-width: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));" alt="RushPoint Logistics">
+      <div style="padding: 24px 20px calc(32px + env(safe-area-inset-bottom, 16px)); display: flex; flex-direction: column; min-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; justify-content: center; gap: 20px; background: linear-gradient(180deg, #1E0207 0%, #2E030C 60%, #120104 100%); color: #FFFFFF;">
+
+        <!-- Logo -->
+        <div style="text-align: center; padding-top: env(safe-area-inset-top, 12px);">
+          <div style="max-width: 240px; margin: 0 auto 10px; padding: 10px 18px; background: #FFFFFF; border-radius: 20px; box-shadow: 0 12px 35px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;">
+            <img src="/static/img/rushpoint-logo-transparent.png" onerror="this.onerror=null;this.src='/static/img/rushpoint-logo.png'" style="height: 56px; width: auto; max-width: 100%; object-fit: contain;" alt="RushPoint Logistics">
           </div>
-          <p style="font-size: 0.75rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 0;">Every Delivery, On Point.</p>
+          <p style="font-size: 0.8rem; font-weight: 700; color: #FECDD3; letter-spacing: 0.5px; margin: 6px 0 0;">Every Delivery, On Point.</p>
         </div>
 
-        <!-- Role Quick-Switcher Chips -->
-        <div style="display: flex; gap: 6px; background: rgba(255,255,255,0.08); padding: 4px; border-radius: 12px; margin-bottom: 14px; border: 1px solid rgba(255,255,255,0.12);">
-          <button type="button" onclick="MobileApp.fillDemoLogin('CUSTOMER')" id="tab-role-cust" style="flex: 1; padding: 7px 0; border: none; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: #881337; color: #FFF;">🛍️ Customer</button>
-          <button type="button" onclick="MobileApp.fillDemoLogin('VENDOR')" id="tab-role-vnd" style="flex: 1; padding: 7px 0; border: none; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: transparent; color: #FECDD3;">🏪 Vendor</button>
-          <button type="button" onclick="MobileApp.fillDemoLogin('RIDER')" id="tab-role-rdr" style="flex: 1; padding: 7px 0; border: none; border-radius: 8px; font-size: 0.72rem; font-weight: 800; cursor: pointer; background: transparent; color: #FECDD3;">🏍️ Courier</button>
-        </div>
-
-        <!-- Login White Card -->
-        <div style="background: #FFFFFF; border-radius: 22px; padding: 22px 20px; color: #0F172A; box-shadow: 0 16px 40px rgba(0,0,0,0.35);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <h2 style="font-size: 1.1rem; font-weight: 900; color: #881337; margin: 0;">Sign In</h2>
-            <span style="font-size: 0.65rem; background: #F0FDF4; color: #059669; border: 1px solid #BBF7D0; padding: 2px 8px; border-radius: 8px; font-weight: 800;">🔒 256-Bit SSL</span>
+        <!-- Login Card -->
+        <div style="background: #FFFFFF; border-radius: 24px; padding: 24px 22px; color: #0F172A; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <h2 style="font-size: 1.2rem; font-weight: 900; color: #881337; margin: 0;">Sign In</h2>
+            <span style="font-size: 0.65rem; background: #F0FDF4; color: #059669; border: 1px solid #BBF7D0; padding: 3px 9px; border-radius: 8px; font-weight: 800;">🔒 256-Bit SSL</span>
           </div>
-          <p style="font-size: 0.72rem; color: #64748B; margin-bottom: 14px;">Enter your credentials to access your mobile account</p>
+          <p style="font-size: 0.73rem; color: #64748B; margin-bottom: 16px;">Enter your registered email or phone number to continue</p>
 
-          <div id="mob-login-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 9px 12px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 12px; font-weight: 600; line-height: 1.35;"></div>
+          <div id="mob-login-error" style="display: none; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; padding: 10px 12px; border-radius: 10px; font-size: 0.75rem; margin-bottom: 12px; font-weight: 600; line-height: 1.4;"></div>
 
           <form id="mobile-login-form" onsubmit="MobileApp.handleLogin(event)">
-            <div class="rp-form-group" style="margin-bottom: 12px;">
-              <label class="rp-label" style="font-size: 0.75rem; font-weight: 700; color: #334155;">Email Address or Phone</label>
-              <input type="text" id="mob-login-input" class="rp-input" placeholder="e.g. customer@rushingpoint.com" value="customer@rushingpoint.com" required oninput="document.getElementById('mob-login-error').style.display='none'" style="border-radius: 12px; padding: 11px 12px; font-size: 0.85rem;">
+            <div style="margin-bottom: 14px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Email Address or Phone</label>
+              <input type="text" id="mob-login-input" autocomplete="username" placeholder="Enter your email or phone number" required
+                oninput="document.getElementById('mob-login-error').style.display='none'"
+                style="width: 100%; padding: 13px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
             </div>
 
-            <div class="rp-form-group" style="margin-bottom: 16px;">
-              <label class="rp-label" style="font-size: 0.75rem; font-weight: 700; color: #334155;">Password</label>
-              <input type="password" id="mob-pwd-input" class="rp-input" placeholder="••••••••" value="customer123" required oninput="document.getElementById('mob-login-error').style.display='none'" style="border-radius: 12px; padding: 11px 12px; font-size: 0.85rem;">
+            <div style="margin-bottom: 18px;">
+              <label style="display: block; font-size: 0.76rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Password</label>
+              <input type="password" id="mob-pwd-input" autocomplete="current-password" placeholder="Enter your password" required
+                oninput="document.getElementById('mob-login-error').style.display='none'"
+                style="width: 100%; padding: 13px 14px; border: 1.5px solid #CBD5E1; border-radius: 12px; font-size: 0.88rem; color: #0F172A; outline: none; box-sizing: border-box; font-family: inherit;"
+                onfocus="this.style.borderColor='#881337'" onblur="this.style.borderColor='#CBD5E1'">
             </div>
 
-            <button type="submit" id="mob-login-submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 13px; font-size: 0.9rem; font-weight: 900; border-radius: 14px; background: #881337;">
+            <button type="submit" id="mob-login-submit"
+              style="width: 100%; padding: 14px; border: none; border-radius: 14px; background: linear-gradient(135deg, #881337, #B91C1C); color: #FFF; font-size: 0.95rem; font-weight: 900; cursor: pointer; box-shadow: 0 4px 16px rgba(136,19,55,0.4); font-family: inherit;">
               Sign In to Account 🔐
             </button>
           </form>
         </div>
 
-        <!-- Customer Self Signup Action -->
-        <div style="text-align: center; margin-top: 14px; margin-bottom: 6px;">
-          <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="text-align: left;">
-              <div style="font-size: 0.8rem; font-weight: 800; color: #FFF;">🛍️ New to RushPoint?</div>
-              <div style="font-size: 0.65rem; color: #FECDD3;">Create a free customer account</div>
-            </div>
-            <button onclick="MobileApp.showCustomerSignupModal()" style="background: #FFF; color: #881337; border: none; font-weight: 900; padding: 7px 14px; border-radius: 10px; font-size: 0.75rem; cursor: pointer;">
-              Sign Up ✨
-            </button>
+        <!-- Sign Up -->
+        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 18px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 800; color: #FFF;">🛍️ New to RushPoint?</div>
+            <div style="font-size: 0.66rem; color: #FECDD3; margin-top: 2px;">Create a free customer account</div>
           </div>
-          <p style="font-size: 0.62rem; color: #94A3B8; margin: 0;">RushPoint Logistics • PCI-DSS Certified Gateway • V1.0</p>
+          <button onclick="MobileApp.showCustomerSignupModal()"
+            style="background: #FFF; color: #881337; border: none; font-weight: 900; padding: 8px 16px; border-radius: 10px; font-size: 0.78rem; cursor: pointer; font-family: inherit; white-space: nowrap;">
+            Sign Up ✨
+          </button>
         </div>
+
+        <p style="text-align: center; font-size: 0.62rem; color: #64748B; margin: 0; padding-bottom: env(safe-area-inset-bottom, 8px);">RushPoint Logistics • PCI-DSS Certified Gateway • V1.0</p>
       </div>
     `;
   },
 
+  // fillDemoLogin is retained as a no-op — demo auto-fill is disabled for production
   fillDemoLogin(role) {
-    const loginIn = document.getElementById("mob-login-input");
-    const pwdIn = document.getElementById("mob-pwd-input");
-    const tCust = document.getElementById("tab-role-cust");
-    const tVnd = document.getElementById("tab-role-vnd");
-    const tRdr = document.getElementById("tab-role-rdr");
-
-    [tCust, tVnd, tRdr].forEach(t => {
-      if (t) { t.style.background = "transparent"; t.style.color = "#FECDD3"; }
-    });
-
-    if (role === "CUSTOMER") {
-      if (loginIn) loginIn.value = "customer@rushingpoint.com";
-      if (pwdIn) pwdIn.value = "customer123";
-      if (tCust) { tCust.style.background = "#881337"; tCust.style.color = "#FFF"; }
-    } else if (role === "VENDOR") {
-      if (loginIn) loginIn.value = "almusik@rushingpoint.com";
-      if (pwdIn) pwdIn.value = "vendor123";
-      if (tVnd) { tVnd.style.background = "#881337"; tVnd.style.color = "#FFF"; }
-    } else if (role === "RIDER") {
-      if (loginIn) loginIn.value = "rider.internal.moto@rushingpoint.com";
-      if (pwdIn) pwdIn.value = "rider123";
-      if (tRdr) { tRdr.style.background = "#881337"; tRdr.style.color = "#FFF"; }
-    }
+    // Production app: do not auto-fill any credentials
   },
 
   async handleLogin(e) {

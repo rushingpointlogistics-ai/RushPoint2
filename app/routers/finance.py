@@ -517,12 +517,15 @@ def make_financial_adjustment(payload: dict, current_user: dict = Depends(requir
     }
 
 # ==========================================
-# REAL LIVE PAYMENT GATEWAY INTEGRATION (FLUTTERWAVE)
+# REAL LIVE PAYMENT GATEWAY INTEGRATION (FLUTTERWAVE v4 OAuth2)
 # ==========================================
 FLW_DEFAULT_SECRET = "Tr7wTwOvbk8vlbJOBVd4m37dYBqijPkJ"
 FLW_DEFAULT_CLIENT_ID = "ce13bd3d-08af-496e-8bf9-37ec62f69819"
 FLW_DEFAULT_ENC_KEY = "yr8VlYO/iNhS/Kgd5t3MSlvJE7o6H5AbZr97vc6hFCg="
 FLW_DEFAULT_HASH = "Atajrajah@123456789123456789123456789123456789"
+
+# Token cache: {token_str, expires_at}
+_flw_token_cache = {"token": None, "expires_at": 0.0}
 
 def get_flw_credentials():
     conn = get_db_connection()
@@ -544,6 +547,56 @@ def get_flw_credentials():
         "secret_hash": secret_hash
     }
 
+def get_flw_bearer_token() -> str:
+    """
+    Fetches a fresh Flutterwave v4 OAuth2 Bearer token from the IDP endpoint.
+    The client_secret (without the FLWSECK_TEST- prefix and -X suffix) is used
+    together with the client_id via client_credentials grant.
+    Token is cached for up to 590 seconds to avoid per-request overhead.
+    """
+    import time as _time
+    global _flw_token_cache
+
+    # Return cached token if still valid
+    if _flw_token_cache["token"] and _time.time() < _flw_token_cache["expires_at"]:
+        return _flw_token_cache["token"]
+
+    creds = get_flw_credentials()
+    # client_secret is the raw secret WITHOUT the FLWSECK_TEST- prefix and -X suffix
+    raw_secret = creds["secret_key"]
+    if raw_secret.startswith("FLWSECK_TEST-"):
+        raw_secret = raw_secret[len("FLWSECK_TEST-"):]
+    if raw_secret.endswith("-X"):
+        raw_secret = raw_secret[:-2]
+    if raw_secret.startswith("FLWSECK-"):
+        raw_secret = raw_secret[len("FLWSECK-"):]
+
+    client_id = creds["client_id"]
+
+    try:
+        token_resp = http_requests.post(
+            "https://idp.flutterwave.com/realms/flutterwave/protocol/openid-connect/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": raw_secret,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15
+        )
+        if token_resp.status_code == 200:
+            token_data = token_resp.json()
+            access_token = token_data.get("access_token", "")
+            expires_in = int(token_data.get("expires_in", 600))
+            _flw_token_cache["token"] = access_token
+            _flw_token_cache["expires_at"] = _time.time() + max(expires_in - 10, 0)
+            return access_token
+    except Exception:
+        pass
+
+    # Fallback: return the raw secret key as bearer (may fail if v3 key is stale)
+    return creds["secret_key"]
+
 @router.post("/payment/initialize")
 def initialize_online_payment(payload: dict, current_user: dict = Depends(get_current_user)):
     """
@@ -558,7 +611,7 @@ def initialize_online_payment(payload: dict, current_user: dict = Depends(get_cu
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment amount must be greater than zero.")
 
     creds = get_flw_credentials()
-    flw_secret = creds["secret_key"]
+    flw_secret = get_flw_bearer_token()
 
     tx_ref = f"RP-PAY-{secrets.randbelow(900000) + 100000}-{int(datetime.now().timestamp())}"
 
@@ -636,7 +689,7 @@ def verify_online_payment(tx_ref: str, current_user: dict = Depends(get_current_
         return {"success": True, "status": "ALREADY_VERIFIED", "message": "Transaction already credited."}
 
     creds = get_flw_credentials()
-    flw_secret = creds["secret_key"]
+    flw_secret = get_flw_bearer_token()
     verified_amount = None
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -976,7 +1029,7 @@ def generate_wallet_topup_payment_link(payload: dict, current_user: dict = Depen
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Minimum top-up amount is ₦100.")
 
     creds = get_flw_credentials()
-    flw_secret = creds["secret_key"]
+    flw_secret = get_flw_bearer_token()
 
     tx_ref = f"RP-TOPUP-{current_user['id'][:8]}-{secrets.randbelow(9000000) + 1000000}"
 
@@ -1074,7 +1127,7 @@ def verify_and_credit_wallet(payload: dict, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found.")
 
     creds = get_flw_credentials()
-    flw_secret = creds["secret_key"]
+    flw_secret = get_flw_bearer_token()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # Call Flutterwave to verify the transaction
